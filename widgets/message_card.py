@@ -102,6 +102,16 @@ class MessageCard(QFrame):
 
     def setText(self, text: str):
         self.text.setMarkdown(text)
+
+        self.text.document().adjustSize()
+
+        self.text.setFixedHeight(
+            int(self.text.document().size().height()) + 8
+        )
+
+        self.text.adjustSize()
+
+        self.adjustSize()
         self.updateGeometry()
 
     # --------------------------------------------------
