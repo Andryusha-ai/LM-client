@@ -1,6 +1,6 @@
 # ui.py
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QIcon, QAction
+from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -10,13 +10,8 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QFileDialog,
     QMessageBox,
-    QToolBar,
-    QStatusBar,
-    QSizePolicy,
     QLabel,
-    QProgressBar,
-    QComboBox,
-    QCheckBox,
+    QFrame,
 )
 
 from widgets.message_card import MessageCard
@@ -24,13 +19,68 @@ from widgets.message_input import MessageInput
 from widgets.attachment_bar import AttachmentBar
 
 
+class SmartButton(QPushButton):
+    """Волна (микрофон) или стрелка (отправить)"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._is_send_mode = False
+        self.setFixedSize(44, 44)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def setSendMode(self, enabled: bool):
+        self._is_send_mode = enabled
+        self.setToolTip("Отправить" if enabled else "Запись голоса")
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        cx, cy = self.width() // 2, self.height() // 2
+
+        if self._is_send_mode:
+            pen = QPen(QColor("#ffffff"), 2)
+            painter.setPen(pen)
+            painter.drawLine(cx - 8, cy + 6, cx + 8, cy - 6)
+            painter.drawLine(cx + 8, cy - 6, cx + 1, cy - 6)
+            painter.drawLine(cx + 8, cy - 6, cx + 8, cy + 1)
+        else:
+            pen = QPen(QColor("#555555"), 2)
+            painter.setPen(pen)
+            heights = [14, 20, 14]
+            w = 4
+            gap = 5
+            start_x = cx - (len(heights) * (w + gap) - gap) // 2
+            for i, h in enumerate(heights):
+                x = start_x + i * (w + gap)
+                y = cy - h // 2
+                painter.drawRoundedRect(x, y, w, h, 2, 2)
+
+
+class PlusButton(QPushButton):
+    """Кнопка с нарисованным плюсом"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(36, 36)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip("Прикрепить файл")
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        pen = QPen(QColor("#666666"), 2)
+        painter.setPen(pen)
+        cx, cy = self.width() // 2, self.height() // 2
+        painter.drawLine(cx, cy - 8, cx, cy + 8)
+        painter.drawLine(cx - 8, cy, cx + 8, cy)
+
+
 class ChatUI(QMainWindow):
     send_message = Signal(str, list)
     clear_history = Signal()
-    save_chat = Signal()
-    load_chat = Signal()
-    settings_requested = Signal()
-    model_changed = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -42,10 +92,8 @@ class ChatUI(QMainWindow):
         self.setCentralWidget(central_widget)
 
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
-
-        self._create_toolbar()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
         # Область сообщений
         self.scroll_area = QScrollArea()
@@ -56,8 +104,8 @@ class ChatUI(QMainWindow):
 
         self.messages_container = QWidget()
         self.messages_layout = QVBoxLayout(self.messages_container)
-        self.messages_layout.setContentsMargins(0, 0, 0, 0)
-        self.messages_layout.setSpacing(10)
+        self.messages_layout.setContentsMargins(16, 16, 16, 16)
+        self.messages_layout.setSpacing(8)
         self.messages_layout.addStretch()
 
         self.scroll_area.setWidget(self.messages_container)
@@ -69,361 +117,236 @@ class ChatUI(QMainWindow):
         main_layout.addWidget(self.attachment_bar)
 
         # Блок ввода
-        input_layout = QHBoxLayout()
-        input_layout.setSpacing(8)
-
-        self.message_input = MessageInput()
-        self.message_input.sendRequested.connect(self._on_send_requested)
-        input_layout.addWidget(self.message_input, stretch=1)
-
-        self.attach_button = QPushButton("📎")
-        self.attach_button.setFixedSize(40, 40)
-        self.attach_button.setToolTip("Прикрепить файл")
-        self.attach_button.clicked.connect(self._on_attach_clicked)
-        input_layout.addWidget(self.attach_button)
-
-        self.send_button = QPushButton("➤")
-        self.send_button.setFixedSize(40, 40)
-        self.send_button.setToolTip("Отправить (Enter)")
-        self.send_button.clicked.connect(self._on_send_requested)
-        input_layout.addWidget(self.send_button)
-
-        main_layout.addLayout(input_layout)
+        self._create_input_area(main_layout)
 
         # Статус-бар
-        self.statusBar = QStatusBar()
-        self.setStatusBar(self.statusBar)
-        self.status_label = QLabel("Готов")
-        self.statusBar.addWidget(self.status_label)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        self.progress_bar.setMaximumWidth(150)
-        self.progress_bar.setMaximumHeight(20)
-        self.statusBar.addPermanentWidget(self.progress_bar)
-
-        self.message_counter = QLabel("Сообщений: 0")
-        self.statusBar.addPermanentWidget(self.message_counter)
+        self._create_statusbar()
 
         self._apply_styles()
 
     # ---------------------------------------------------------
 
-    def _create_toolbar(self):
-        toolbar = QToolBar("Главная панель")
-        toolbar.setMovable(False)
-        self.addToolBar(Qt.TopToolBarArea, toolbar)
+    def _create_input_area(self, parent_layout):
+        input_wrapper = QWidget()
+        input_wrapper.setObjectName("inputWrapper")
 
-        clear_action = QAction("🗑 Очистить", self)
-        clear_action.setToolTip("Очистить историю чата")
-        clear_action.triggered.connect(self._on_clear_clicked)
-        toolbar.addAction(clear_action)
+        outer = QVBoxLayout(input_wrapper)
+        outer.setContentsMargins(12, 8, 12, 8)
+        outer.setSpacing(0)
 
-        toolbar.addSeparator()
+        input_container = QWidget()
+        input_container.setObjectName("inputContainer")
 
-        save_action = QAction("💾 Сохранить", self)
-        save_action.setToolTip("Сохранить чат в файл")
-        save_action.triggered.connect(self.save_chat.emit)
-        toolbar.addAction(save_action)
+        row = QHBoxLayout(input_container)
+        row.setContentsMargins(8, 4, 4, 4)
+        row.setSpacing(4)
 
-        load_action = QAction("📂 Загрузить", self)
-        load_action.setToolTip("Загрузить чат из файла")
-        load_action.triggered.connect(self.load_chat.emit)
-        toolbar.addAction(load_action)
+        self.message_input = MessageInput()
+        self.message_input.setObjectName("messageInput")
+        self.message_input.sendRequested.connect(self._on_send_requested)
+        self.message_input.textChanged2.connect(self._on_text_changed)
+        row.addWidget(self.message_input, stretch=1)
 
-        toolbar.addSeparator()
+        self.attach_button = PlusButton()
+        self.attach_button.setObjectName("attachBtn")
+        self.attach_button.clicked.connect(self._on_attach_clicked)
+        row.addWidget(self.attach_button)
 
-        toolbar.addWidget(QLabel("Модель: "))
+        self.smart_button = SmartButton()
+        self.smart_button.setObjectName("smartBtn")
+        self.smart_button.clicked.connect(self._on_smart_clicked)
+        row.addWidget(self.smart_button)
 
-        self.model_selector = QComboBox()
-        self.model_selector.setMinimumWidth(150)
-        self.model_selector.addItems([
-            "Qwen 9B VLM",
-            "Qwen 7B",
-            "Llama 3.2",
-            "Другая..."
-        ])
-        self.model_selector.currentTextChanged.connect(self.model_changed.emit)
-        toolbar.addWidget(self.model_selector)
+        outer.addWidget(input_container)
+        parent_layout.addWidget(input_wrapper)
 
-        toolbar.addSeparator()
+    # ---------------------------------------------------------
 
-        settings_action = QAction("⚙ Настройки", self)
-        settings_action.setToolTip("Открыть настройки")
-        settings_action.triggered.connect(self.settings_requested.emit)
-        toolbar.addAction(settings_action)
+    def _create_statusbar(self):
+        status_widget = QWidget()
+        status_widget.setObjectName("statusBar")
+        status_widget.setFixedHeight(24)
 
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        toolbar.addWidget(spacer)
+        layout = QHBoxLayout(status_widget)
+        layout.setContentsMargins(12, 0, 12, 0)
 
-        self.dev_mode_check = QCheckBox("Dev")
-        self.dev_mode_check.setToolTip("Режим разработчика")
-        toolbar.addWidget(self.dev_mode_check)
+        self.status_label = QLabel("Готов")
+        self.status_label.setObjectName("statusLabel")
+        layout.addWidget(self.status_label)
+
+        layout.addStretch()
+
+        self.message_counter = QLabel("Сообщений: 0")
+        self.message_counter.setObjectName("statusLabel")
+        layout.addWidget(self.message_counter)
+
+        self.centralWidget().layout().addWidget(status_widget)
 
     # ---------------------------------------------------------
 
     def _apply_styles(self):
         self.setStyleSheet("""
-            QMainWindow { background-color: #1a1a1a; }
-            QToolBar {
-                background-color: #2a2a2a;
-                border: none;
-                padding: 4px;
-                spacing: 8px;
-            }
-            QToolBar QToolButton {
-                background-color: transparent;
-                border: none;
-                padding: 4px 8px;
-                border-radius: 4px;
-                color: #e0e0e0;
-            }
-            QToolBar QToolButton:hover { background-color: #3a3a3a; }
-            QToolBar QToolButton:pressed { background-color: #4a4a4a; }
-            QComboBox {
-                background-color: #2a2a2a;
-                border: 1px solid #3f3f46;
-                border-radius: 4px;
-                padding: 4px 8px;
-                color: #e0e0e0;
-            }
-            QComboBox::drop-down { border: none; }
-            QComboBox QAbstractItemView {
-                background-color: #2a2a2a;
-                color: #e0e0e0;
-                selection-background-color: #3a3a3a;
-            }
-            QCheckBox { color: #e0e0e0; }
-            QPushButton {
-                background-color: #2a2a2a;
-                border: 1px solid #3f3f46;
-                border-radius: 4px;
-                color: #e0e0e0;
-                font-size: 16px;
-            }
-            QPushButton:hover { background-color: #3a3a3a; }
-            QPushButton:pressed { background-color: #4a4a4a; }
-            QPushButton:disabled { opacity: 0.5; }
-            QStatusBar {
-                background-color: #2a2a2a;
-                color: #a0a0a0;
-            }
-            QScrollArea { border: none; background: transparent; }
+            QMainWindow, QWidget { background-color: #f7f7f8; color: #111111; }
+
+            QScrollArea { background: transparent; border: none; }
             QScrollBar:vertical {
-                background: #2a2a2a;
-                width: 10px;
-                border-radius: 5px;
+                background: transparent;
+                width: 6px;
+                margin: 0;
             }
             QScrollBar::handle:vertical {
-                background: #4a4a4a;
-                border-radius: 5px;
-                min-height: 20px;
+                background: #cccccc;
+                border-radius: 3px;
+                min-height: 24px;
             }
-            QScrollBar::handle:vertical:hover { background: #5a5a5a; }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
-            QScrollBar:horizontal {
-                background: #2a2a2a;
-                height: 10px;
-                border-radius: 5px;
+            QScrollBar::handle:vertical:hover { background: #aaaaaa; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+
+            QWidget#inputWrapper {
+                background-color: #ffffff;
+                border-top: 1px solid #e5e5e5;
             }
-            QScrollBar::handle:horizontal {
-                background: #4a4a4a;
-                border-radius: 5px;
-                min-width: 20px;
+            QWidget#inputContainer {
+                background-color: #f0f0f0;
+                border-radius: 12px;
             }
-            QScrollBar::handle:horizontal:hover { background: #5a5a5a; }
+            QTextEdit#messageInput {
+                background: transparent;
+                border: none;
+                color: #111111;
+                font-size: 14px;
+                padding: 4px 0;
+            }
+            QPushButton#attachBtn {
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+            }
+            QPushButton#attachBtn:hover { background-color: #e0e0e0; }
+
+            QPushButton#smartBtn {
+                background-color: #e0e0e0;
+                border: none;
+                border-radius: 10px;
+            }
+            QPushButton#smartBtn:hover { background-color: #d0d0d0; }
+            QPushButton#smartBtn[sendMode="true"] { background-color: #2563eb; }
+            QPushButton#smartBtn[sendMode="true"]:hover { background-color: #1d4ed8; }
+            QPushButton#smartBtn:disabled { background-color: #e0e0e0; }
+
+            QWidget#statusBar {
+                background-color: #f7f7f8;
+                border-top: 1px solid #e5e5e5;
+            }
+            QLabel#statusLabel { color: #999999; font-size: 11px; background: transparent; }
         """)
 
     # ---------------------------------------------------------
 
+    def _on_text_changed(self, has_text: bool):
+        self.smart_button.setSendMode(has_text)
+        self.smart_button.setProperty("sendMode", "true" if has_text else "false")
+        self.smart_button.style().unpolish(self.smart_button)
+        self.smart_button.style().polish(self.smart_button)
+
+    def _on_smart_clicked(self):
+        if self.message_input.message():
+            self._on_send_requested()
+        else:
+            self.setStatus("🎤 Запись голоса (скоро...)", 2000)
+
     def _on_send_requested(self):
         text = self.message_input.message()
         attachments = self.attachment_bar.attachments()
-
         if not text and not attachments:
             return
-
-        # Добавляем сообщение пользователя сразу в UI
         self.addMessage("user", text)
-        
-        # Эмитим сигнал для внешней обработки
         self.send_message.emit(text, attachments)
-
-        # Очищаем поле ввода
         self.message_input.clearMessage()
         self.attachment_bar.clear()
 
-    # ---------------------------------------------------------
-
     def _on_attach_clicked(self):
         file_paths, _ = QFileDialog.getOpenFileNames(
-            self,
-            "Выберите файлы для прикрепления",
-            "",
-            "Изображения (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;"
-            "Все файлы (*.*)"
+            self, "Выберите файлы", "",
+            "Изображения (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;Все файлы (*.*)"
         )
-
         for path in file_paths:
             self.attachment_bar.addAttachment(path)
 
     # ---------------------------------------------------------
 
-    def _on_clear_clicked(self):
-        reply = QMessageBox.question(
-            self,
-            "Очистка чата",
-            "Вы уверены, что хотите очистить всю историю сообщений?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
-        if reply == QMessageBox.Yes:
-            self.clear_history.emit()
-            self.clearMessages()
-
-    # ---------------------------------------------------------
-
     def addMessage(self, role: str, text: str):
-        """Добавление сообщения в чат"""
-        # Убираем старый стрейч
         self.messages_layout.takeAt(self.messages_layout.count() - 1)
-
         card = MessageCard(role, text)
         self.messages_layout.addWidget(card)
-
-        # Добавляем новый стрейч
         self.messages_layout.addStretch()
-
-        # Обновляем счетчик
-        count = self.getMessageCount()
-        self.message_counter.setText(f"Сообщений: {count}")
-
-        # Прокручиваем вниз
+        self.message_counter.setText(f"Сообщений: {self.getMessageCount()}")
         self.scroll_to_bottom()
-
         return card
 
-    # ---------------------------------------------------------
-
     def updateLastMessage(self, text: str):
-        """Обновление последнего сообщения (для стриминга)"""
         count = self.messages_layout.count()
         if count < 2:
             return
-
         last_widget = self.messages_layout.itemAt(count - 2).widget()
-
         if isinstance(last_widget, MessageCard):
             last_widget.setText(text)
-
         self.scroll_to_bottom()
 
-    # ---------------------------------------------------------
-
     def appendToLastMessage(self, text: str):
-        """Добавление текста к последнему сообщению (для стриминга)"""
         count = self.messages_layout.count()
         if count < 2:
             return
-
         last_widget = self.messages_layout.itemAt(count - 2).widget()
-
         if isinstance(last_widget, MessageCard):
             last_widget.appendText(text)
-
         self.scroll_to_bottom()
 
-    # ---------------------------------------------------------
-
     def clearMessages(self):
-        """Очистка всех сообщений"""
         while self.messages_layout.count() > 1:
             item = self.messages_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-
         if self.messages_layout.count() == 0:
             self.messages_layout.addStretch()
-
         self.message_counter.setText("Сообщений: 0")
         self.attachment_bar.clear()
 
-    # ---------------------------------------------------------
-
     def getMessageCount(self) -> int:
         return self.messages_layout.count() - 1
-
-    # ---------------------------------------------------------
 
     def getAllMessages(self) -> list:
         messages = []
         for i in range(self.messages_layout.count() - 1):
             widget = self.messages_layout.itemAt(i).widget()
             if isinstance(widget, MessageCard):
-                messages.append({
-                    "role": widget.role,
-                    "text": widget.markdown()
-                })
+                messages.append({"role": widget.role, "text": widget.markdown()})
         return messages
-
-    # ---------------------------------------------------------
 
     def setStatus(self, text: str, duration: int = 3000):
         self.status_label.setText(text)
         if duration > 0:
             QTimer.singleShot(duration, lambda: self.status_label.setText("Готов"))
 
-    # ---------------------------------------------------------
-
-    def setProgress(self, value: int, max_value: int = 100):
-        if value < 0 or value > max_value:
-            self.progress_bar.setVisible(False)
-            return
-
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setMaximum(max_value)
-        self.progress_bar.setValue(value)
-
-        if value == max_value:
-            QTimer.singleShot(500, lambda: self.progress_bar.setVisible(False))
-
-    # ---------------------------------------------------------
-
     def scroll_to_bottom(self):
         QTimer.singleShot(50, lambda: self.scroll_area.verticalScrollBar().setValue(
             self.scroll_area.verticalScrollBar().maximum()
         ))
 
-    # ---------------------------------------------------------
-
     def setSendEnabled(self, enabled: bool):
-        self.send_button.setEnabled(enabled)
+        self.smart_button.setEnabled(enabled)
         self.message_input.setEnabled(enabled)
         self.attach_button.setEnabled(enabled)
-
-        if enabled:
-            self.setStatus("Готов")
-        else:
-            self.setStatus("Ожидание ответа...", 0)
-
-    # ---------------------------------------------------------
+        self.setStatus("Готов" if enabled else "Ожидание ответа...", 0 if not enabled else 1)
 
     def getInputText(self) -> str:
         return self.message_input.message()
 
-    # ---------------------------------------------------------
-
     def setInputText(self, text: str):
         self.message_input.setPlainText(text)
 
-    # ---------------------------------------------------------
-
     def focusInput(self):
         self.message_input.setFocus()
-
-    # ---------------------------------------------------------
 
     def closeEvent(self, event):
         event.accept()

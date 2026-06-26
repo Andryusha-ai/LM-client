@@ -1,5 +1,5 @@
 # widgets/message_card.py
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QTextOption
 from PySide6.QtWidgets import (
     QFrame,
@@ -25,24 +25,23 @@ class MessageCard(QFrame):
 
         self.role = role
 
-        self.setFrameShape(QFrame.StyledPanel)
-        self.setSizePolicy(
-            QSizePolicy.Expanding,
-            QSizePolicy.Maximum,
-        )
+        self.setFrameShape(QFrame.NoFrame)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(12, 6, 12, 6)
+        layout.setSpacing(4)
 
         self.title = QLabel(self._title())
-        self.text = QTextBrowser()
+        self.title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
 
+        self.text = QTextBrowser()
+        self.text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.text.setOpenExternalLinks(True)
         self.text.setFrameShape(QFrame.NoFrame)
         self.text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        # Исправлено: создаем QTextOption с правильным параметром
         text_option = QTextOption()
         text_option.setWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
         self.text.document().setDefaultTextOption(text_option)
@@ -67,56 +66,41 @@ class MessageCard(QFrame):
 
     def _apply_style(self):
         if self.role == "user":
-            self.setStyleSheet("""
-                QFrame {
-                    border:1px solid #3f3f46;
-                    border-radius:10px;
-                    background:#303030;
-                }
-                QLabel {
-                    font-weight:bold;
-                }
-                QTextBrowser {
-                    border:none;
-                    background:transparent;
-                }
-            """)
+            title_color = "#555555"
         elif self.role == "assistant":
-            self.setStyleSheet("""
-                QFrame {
-                    border:1px solid #404040;
-                    border-radius:10px;
-                    background:#252525;
-                }
-                QLabel {
-                    font-weight:bold;
-                }
-                QTextBrowser {
-                    border:none;
-                    background:transparent;
-                }
-            """)
+            title_color = "#555555"
         else:
-            self.setStyleSheet("""
-                QFrame {
-                    border:1px solid #555;
-                    border-radius:10px;
-                    background:#1f1f1f;
-                }
-                QLabel {
-                    font-weight:bold;
-                    color:#d99;
-                }
-                QTextBrowser {
-                    border:none;
-                    background:transparent;
-                }
-            """)
+            title_color = "#aa4444"
+
+        self.setStyleSheet(f"""
+            QFrame {{
+                border: none;
+                background: transparent;
+            }}
+            QLabel {{
+                font-weight: bold;
+                font-size: 12px;
+                color: {title_color};
+            }}
+            QTextBrowser {{
+                border: none;
+                background: transparent;
+                color: #111111;
+            }}
+        """)
+
+    # --------------------------------------------------
+
+    def sizeHint(self):
+        doc_height = int(self.text.document().size().height())
+        title_height = self.title.sizeHint().height()
+        return QSize(self.width(), doc_height + title_height + 28)
 
     # --------------------------------------------------
 
     def setText(self, text: str):
         self.text.setMarkdown(text)
+        self.updateGeometry()
 
     # --------------------------------------------------
 
@@ -125,6 +109,7 @@ class MessageCard(QFrame):
         cursor.movePosition(cursor.End)
         cursor.insertText(text)
         self.text.setTextCursor(cursor)
+        self.updateGeometry()
 
     # --------------------------------------------------
 
