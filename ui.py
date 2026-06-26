@@ -13,6 +13,10 @@ from PySide6.QtWidgets import (
     QLabel,
     QFrame,
 )
+from pathlib import Path
+from datetime import datetime
+
+from PySide6.QtCore import QDir
 
 from widgets.message_card import MessageCard
 from widgets.message_input import MessageInput
@@ -142,6 +146,7 @@ class ChatUI(QMainWindow):
         row.setSpacing(4)
 
         self.message_input = MessageInput()
+        self.message_input.imagePasted.connect(self.on_image_pasted)
         self.message_input.setObjectName("messageInput")
         self.message_input.sendRequested.connect(self._on_send_requested)
         self.message_input.textChanged2.connect(self._on_text_changed)
@@ -350,3 +355,18 @@ class ChatUI(QMainWindow):
 
     def closeEvent(self, event):
         event.accept()
+
+    # -----------------------------------------------------------
+
+    def on_image_pasted(self, image):
+
+        temp_dir = Path("temp")
+        temp_dir.mkdir(exist_ok=True)
+
+        filename = datetime.now().strftime("paste_%Y%m%d_%H%M%S_%f.png")
+
+        path = temp_dir / filename
+
+        image.save(str(path))
+
+        self.attachment_bar.addAttachment(str(path))

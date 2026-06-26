@@ -1,7 +1,8 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QTextOption
 from PySide6.QtWidgets import QTextEdit
-
+from PySide6.QtCore import QBuffer, QIODevice
+from PySide6.QtGui import QTextOption, QImage
 
 class MessageInput(QTextEdit):
     """
@@ -13,6 +14,7 @@ class MessageInput(QTextEdit):
 
     sendRequested = Signal()
     textChanged2 = Signal(bool)  # True если есть текст, False если пусто
+    imagePasted = Signal(QImage)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -58,3 +60,14 @@ class MessageInput(QTextEdit):
     def clearMessage(self):
         self.clear()
         self._update_height()
+    # ---------------------------------------------------------
+    def insertFromMimeData(self, source):
+        if source.hasImage():
+            image = source.imageData()
+
+            if isinstance(image, QImage):
+                self.imagePasted.emit(image)
+
+            return
+
+        super().insertFromMimeData(source)

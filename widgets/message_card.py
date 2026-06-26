@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QTextBrowser,
     QVBoxLayout,
     QSizePolicy,
+    QAbstractScrollArea,
 )
 
 
@@ -33,7 +34,7 @@ class MessageCard(QFrame):
         layout.setSpacing(4)
 
         self.title = QLabel(self._title())
-        self.title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.text = QTextBrowser()
         self.text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -41,6 +42,7 @@ class MessageCard(QFrame):
         self.text.setFrameShape(QFrame.NoFrame)
         self.text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.text.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
 
         text_option = QTextOption()
         text_option.setWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
@@ -105,11 +107,24 @@ class MessageCard(QFrame):
     # --------------------------------------------------
 
     def appendText(self, text: str):
+        print("append")
         cursor = self.text.textCursor()
         cursor.movePosition(cursor.End)
         cursor.insertText(text)
         self.text.setTextCursor(cursor)
+
+        # пересчитать высоту QTextBrowser
+        self.text.document().adjustSize()
+        h = int(self.text.document().size().height()) + 8
+        self.text.setFixedHeight(h)
+
         self.updateGeometry()
+        self.adjustSize()
+        print(
+            self.height(),
+            self.text.height(),
+            self.text.document().size().height()
+        )
 
     # --------------------------------------------------
 

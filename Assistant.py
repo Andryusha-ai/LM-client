@@ -1,6 +1,7 @@
 # assistant.py
 import sys
 import requests
+import base64
 from ui import ChatUI
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer, QThread, Signal, QObject
@@ -9,6 +10,11 @@ LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
 API_KEY = "sk-lm-vZmTYDyw:kh9AZHdIMoeBbB78bw8s"
 MODEL_NAME = "local-model"
 
+def image_to_data_url(path):
+    with open(path, "rb") as f:
+        encoded = base64.b64encode(f.read()).decode("utf-8")
+
+    return f"data:image/png;base64,{encoded}"
 
 class LMWorker(QObject):
     finished = Signal(str)
@@ -36,8 +42,10 @@ class LMWorker(QObject):
         except Exception as e:
             self.error.emit(f"{type(e).__name__}: {str(e)}")
 
+    
 
 class App(QObject):
+
     def __init__(self):
         super().__init__()
         self.history = []
@@ -58,7 +66,22 @@ class App(QObject):
 
     def on_send(self, text, attachments):
         self.window.setSendEnabled(False)
-        self.history.append({"role": "user", "content": text})
+        content = [
+            {
+            "type": "text",
+            "text": text
+            }
+        ]
+        for path in attachments:
+            content.append(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_to_data_url(path)
+                }
+            }
+        )
+        self.history.append({"role": "user", "content": content})
 
         self.window.addMessage("assistant", ".")
         self.dot_state = 0
