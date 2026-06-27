@@ -16,16 +16,12 @@ from PySide6.QtWidgets import (
 from pathlib import Path
 from datetime import datetime
 
-from PySide6.QtCore import QDir
-
 from widgets.message_card import MessageCard
 from widgets.message_input import MessageInput
 from widgets.attachment_bar import AttachmentBar
 
 
 class SmartButton(QPushButton):
-    """Волна (микрофон) или стрелка (отправить)"""
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._is_send_mode = False
@@ -63,8 +59,6 @@ class SmartButton(QPushButton):
 
 
 class PlusButton(QPushButton):
-    """Кнопка с нарисованным плюсом"""
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(36, 36)
@@ -108,8 +102,8 @@ class ChatUI(QMainWindow):
 
         self.messages_container = QWidget()
         self.messages_layout = QVBoxLayout(self.messages_container)
-        self.messages_layout.setContentsMargins(16, 16, 16, 16)
-        self.messages_layout.setSpacing(8)
+        self.messages_layout.setContentsMargins(8, 12, 8, 12)
+        self.messages_layout.setSpacing(4)
         self.messages_layout.addStretch()
 
         self.scroll_area.setWidget(self.messages_container)
@@ -265,7 +259,8 @@ class ChatUI(QMainWindow):
         attachments = self.attachment_bar.attachments()
         if not text and not attachments:
             return
-        self.addMessage("user", text)
+        # Передаём вложения в карточку чтобы показать их в диалоге
+        self.addMessage("user", text, attachments=attachments)
         self.send_message.emit(text, attachments)
         self.message_input.clearMessage()
         self.attachment_bar.clear()
@@ -278,11 +273,21 @@ class ChatUI(QMainWindow):
         for path in file_paths:
             self.attachment_bar.addAttachment(path)
 
+    def on_image_pasted(self, image):
+        from pathlib import Path
+        temp_dir = Path("temp")
+        temp_dir.mkdir(exist_ok=True)
+        from datetime import datetime
+        filename = datetime.now().strftime("paste_%Y%m%d_%H%M%S_%f.png")
+        path = temp_dir / filename
+        image.save(str(path))
+        self.attachment_bar.addAttachment(str(path))
+
     # ---------------------------------------------------------
 
-    def addMessage(self, role: str, text: str):
+    def addMessage(self, role: str, text: str, attachments: list = None):
         self.messages_layout.takeAt(self.messages_layout.count() - 1)
-        card = MessageCard(role, text)
+        card = MessageCard(role, text, attachments=attachments)
         self.messages_layout.addWidget(card)
         self.messages_layout.addStretch()
         self.message_counter.setText(f"Сообщений: {self.getMessageCount()}")
@@ -355,18 +360,3 @@ class ChatUI(QMainWindow):
 
     def closeEvent(self, event):
         event.accept()
-
-    # -----------------------------------------------------------
-
-    def on_image_pasted(self, image):
-
-        temp_dir = Path("temp")
-        temp_dir.mkdir(exist_ok=True)
-
-        filename = datetime.now().strftime("paste_%Y%m%d_%H%M%S_%f.png")
-
-        path = temp_dir / filename
-
-        image.save(str(path))
-
-        self.attachment_bar.addAttachment(str(path))
