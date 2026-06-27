@@ -5,6 +5,7 @@ import base64
 from ui import ChatUI
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer, QThread, Signal, QObject
+from pathlib import Path
 
 LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
 API_KEY = "sk-lm-vZmTYDyw:kh9AZHdIMoeBbB78bw8s"
@@ -68,19 +69,45 @@ class App(QObject):
         self.window.setSendEnabled(False)
         content = [
             {
-            "type": "text",
-            "text": text
+                "type": "text",
+                "text": text
             }
         ]
+
+        IMAGE_EXTENSIONS = {
+            ".png", ".jpg", ".jpeg",
+            ".webp", ".bmp", ".gif"
+        }
+
+        TEXT_EXTENSIONS = {
+            ".py", ".txt", ".md", ".json",
+            ".yaml", ".yml", ".xml",
+            ".ini", ".cfg",
+            ".js", ".ts",
+            ".cpp", ".c", ".h",
+            ".cs", ".java"
+       }
+
         for path in attachments:
-            content.append(
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": image_to_data_url(path)
-                }
-            }
-        )
+            suffix = Path(path).suffix.lower()
+
+            if suffix in IMAGE_EXTENSIONS:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_to_data_url(path)
+                     }
+                })
+
+            elif suffix in TEXT_EXTENSIONS:
+                with open(path, "r", encoding="utf-8") as f:
+                    file_text = f.read()
+
+                content.append({
+                    "type": "text",
+                    "text": f"Файл {Path(path).name}:\n```{suffix[1:]}\n{file_text}\n```"
+                })
+
         self.history.append({"role": "user", "content": content})
 
         self.window.addMessage("assistant", ".")
