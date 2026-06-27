@@ -1,5 +1,5 @@
 # widgets/message_card.py
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QFrame,
@@ -20,6 +20,9 @@ class MessageCard(QFrame):
     Карточка одного сообщения.
     role: "user" | "assistant" | "system"
     """
+
+    imageClicked = Signal(str)
+    fileClicked = Signal(str)
 
     def __init__(self, role: str, text: str = "", attachments: list = None, parent=None):
         super().__init__(parent)
@@ -51,12 +54,29 @@ class MessageCard(QFrame):
                     img_label = QLabel()
                     pix = QPixmap(path)
                     if not pix.isNull():
-                        pix = pix.scaledToWidth(260, Qt.SmoothTransformation)
+                        MAX_W = 260
+                        MAX_H = 220
+                        pix = pix.scaled(
+                            MAX_W,
+                            MAX_H,
+                            Qt.KeepAspectRatio,
+                            Qt.SmoothTransformation
+                        )
                         img_label.setPixmap(pix)
+                        img_label.setCursor(Qt.PointingHandCursor)
+                        img_label.mousePressEvent = (
+                            lambda e, p=path: self.imageClicked.emit(p)
+                        )
                         img_label.setFixedSize(pix.size())
+                        img_label.setAlignment(Qt.AlignCenter)
                         bubble_layout.addWidget(img_label)
                 else:
                     file_label = QLabel(f"📄 {Path(path).name}")
+                    file_label.setCursor(Qt.PointingHandCursor)
+                    file_label.mousePressEvent = (
+                        lambda e, p=path: (print("CLICK", p), self.fileClicked.emit(p))
+                    )
+
                     file_label.setStyleSheet("color: #555; font-size: 12px;")
                     bubble_layout.addWidget(file_label)
 

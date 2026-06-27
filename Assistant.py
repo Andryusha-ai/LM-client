@@ -6,10 +6,12 @@ from ui import ChatUI
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer, QThread, Signal, QObject
 from pathlib import Path
+from cache_manager import CacheManager
 
 LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
 API_KEY = "sk-lm-vZmTYDyw:kh9AZHdIMoeBbB78bw8s"
 MODEL_NAME = "local-model"
+CacheManager.init()
 
 def image_to_data_url(path):
     with open(path, "rb") as f:

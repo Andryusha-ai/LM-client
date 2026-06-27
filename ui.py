@@ -1,5 +1,6 @@
 # ui.py
-from PySide6.QtCore import Qt, Signal, QTimer
+import os
+from PySide6.QtCore import Qt, Signal, QTimer, QEvent
 from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -15,11 +16,12 @@ from PySide6.QtWidgets import (
 )
 from pathlib import Path
 from datetime import datetime
+from cache_manager import CacheManager
 
 from widgets.message_card import MessageCard
 from widgets.message_input import MessageInput
 from widgets.attachment_bar import AttachmentBar
-
+from widgets.image_viewer import ImageViewer
 
 class SmartButton(QPushButton):
     def __init__(self, parent=None):
@@ -79,6 +81,7 @@ class PlusButton(QPushButton):
 class ChatUI(QMainWindow):
     send_message = Signal(str, list)
     clear_history = Signal()
+    
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -87,11 +90,17 @@ class ChatUI(QMainWindow):
         self.setMinimumSize(800, 600)
 
         central_widget = QWidget()
+        central_widget.setAcceptDrops(True)
         self.setCentralWidget(central_widget)
+
+        central_widget.setAcceptDrops(True)
+        central_widget.installEventFilter(self)
 
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+        # Драг энд дроп
+        #self.setAcceptDrops(True)
 
         # Область сообщений
         self.scroll_area = QScrollArea()
@@ -121,6 +130,8 @@ class ChatUI(QMainWindow):
         self._create_statusbar()
 
         self._apply_styles()
+        self.image_viewer = ImageViewer(self)
+        self.image_viewer.hide()
 
     # ---------------------------------------------------------
 
@@ -268,9 +279,10 @@ class ChatUI(QMainWindow):
     def _on_attach_clicked(self):
         file_paths, _ = QFileDialog.getOpenFileNames(
             self, "Выберите файлы", "",
-            "Изображения (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;Все файлы (*.*)"
+            "Все файлы (*.*);;Изображения (*.png *.jpg *.jpeg *.bmp *.gif *.webp)"
         )
         for path in file_paths:
+            
             self.attachment_bar.addAttachment(path)
 
     def on_image_pasted(self, image):
@@ -288,6 +300,8 @@ class ChatUI(QMainWindow):
     def addMessage(self, role: str, text: str, attachments: list = None):
         self.messages_layout.takeAt(self.messages_layout.count() - 1)
         card = MessageCard(role, text, attachments=attachments)
+        card.imageClicked.connect(self.showImage)
+        card.fileClicked.connect(self.openFile)
         self.messages_layout.addWidget(card)
         self.messages_layout.addStretch()
         self.message_counter.setText(f"Сообщений: {self.getMessageCount()}")
@@ -360,3 +374,57 @@ class ChatUI(QMainWindow):
 
     def closeEvent(self, event):
         event.accept()
+
+    def showImage(self, path):
+        self.image_viewer.setGeometry(self.centralWidget().geometry())
+        self.image_viewer.showImage(path)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        if self.image_viewer.isVisible():
+             self.image_viewer.setGeometry(self.rect())
+    def openFile(self, path):
+        
+        if not os.path.exists(path):
+            QMessageBox.warning(
+                self,
+                "Файл не найден",
+                path
+            )
+            return
+
+        os.startfile(path)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+
+        for url in event.mimeData().urls():
+
+            if url.isLocalFile():
+
+                path = url.toLocalFile()
+
+                self.attachment_bar.addAttachment(path)
+
+        event.acceptProposedAction()
+
+    def eventFilter(self, obj, event):
+
+        if event.type() == QEvent.DragEnter:
+            if event.mimeData().hasUrls():
+                event.acceptProposedAction()
+                return True
+
+        elif event.type() == QEvent.Drop:
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    self.attachment_bar.addAttachment(url.toLocalFile())
+
+            event.acceptProposedAction()
+            return True
+
+        return super().eventFilter(obj, event)
