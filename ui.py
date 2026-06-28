@@ -72,7 +72,7 @@ class SmartButton(QPushButton):
 
     def setStopMode(self, enabled: bool):
         self._mode = "stop" if enabled else "mic"
-        self.setToolTip("Остановить" if enabled else "Запись голоса")
+        self.setToolTip("Остановить" if enabled else "Генерация остановлена")
         self.update()
 
     def paintEvent(self, event):
@@ -542,25 +542,32 @@ class ChatUI(QMainWindow):
         return super().eventFilter(obj, event)
     
     def _on_settings_clicked(self):
-        # 1. Вытаскиваем текущие значения прямо из твоего словаря self.config
+
         current_url = self.config.get("api_url", "http://127.0.0.1:1234/v1")
         current_key = self.config.get("api_key", "")
 
-        # 2. Показываем наш диалог (не забудь импортировать SettingsDialog, если вынес его в отдельный файл)
+
         dialog = SettingsDialog(current_url, current_key, self)
         
         if dialog.exec() == QDialog.Accepted:
             new_values = dialog.get_values()
             
-            # 3. Обновляем текущий словарь конфигурации в UI
+
             self.config.update(new_values)
             
-            # 4. Импортируем (если еще не импортировано в ui.py) и вызываем сохранение в файл
+
             from config import save_config
             save_config(self.config)
             
-            # 5. Пинаем сигнал наружу (в main.py), если какому-то бэкенду/клиенту нужно 
-            # на лету пересоздать сессию с новым ключом или URL
             self.settings_saved.emit(self.config)
             
             self.setStatus("⚙️ Настройки сохранены в config.json", 2000)
+
+    def getLastMessage(self):
+        """Возвращает текст последнего сообщения"""
+        count = self.messages_layout.count()
+        if count > 1:
+            last_widget = self.messages_layout.itemAt(count - 2).widget()
+            if isinstance(last_widget, MessageCard):
+                return last_widget.markdown() 
+        return ""

@@ -4,9 +4,10 @@ import logging
 import traceback
 import requests
 import base64
+import json
 from ui import ChatUI
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QTimer, QThread, Signal, QObject
+from PySide6.QtCore import QTimer, QThread, Signal, QObject, QMutex, QWaitCondition
 from pathlib import Path
 from cache_manager import CacheManager
 from config import load_config, save_config
@@ -52,45 +53,107 @@ def image_to_data_url(path):
 
 
 class LMWorker(QObject):
-    finished = Signal(str)
-    error = Signal(str)
+    chunk_received = Signal(str)  # каждый новый кусок текста
+    finished = Signal()           # стрим завершён
+    error = Signal(str)           # ошибка
 
     def __init__(self, messages, config):
         super().__init__()
         self.config = config
         self.messages = messages
         self._cancelled = False
-        self._session = requests.Session()
+        self._session = None
+        self._response = None
+        self._mutex = QMutex()
+        self._cond = QWaitCondition()
 
     def cancel(self):
-        print("cancel", id(self))
+        """Безопасная отмена запроса"""
+        self._mutex.lock()
         self._cancelled = True
+        self._mutex.unlock()
+        
+        # Пробуждаем поток, если он ждёт
+        self._cond.wakeAll()
+        
+        # Закрываем сессию, чтобы прервать чтение
         try:
-            self._session.close()  # закрывает сокет, прерывает запрос
+            if self._response:
+                self._response.close()
+            if self._session:
+                self._session.close()
         except Exception:
             pass
 
     def run(self):
-        print("run", id(self))
+        """Запуск стрим-запроса"""
         try:
-            response = self._session.post(
+            self._session = requests.Session()
+            
+            # Отправляем запрос в стрим-режиме
+            self._response = self._session.post(
                 self.config['api_url'],
                 headers={"Authorization": f"Bearer {self.config['api_key']}"},
                 json={
                     "model": MODEL_NAME,
                     "messages": self.messages,
-                    "stream": False,
+                    "stream": True,
                 },
+                stream=True,
                 timeout=120,
             )
-            if self._cancelled:
+            
+            # Проверяем статус до чтения стрима
+            if self._response.status_code != 200:
+                self._handle_http_error(self._response.status_code)
                 return
-            response.raise_for_status()
-            text = response.json()["choices"][0]["message"]["content"]
-            print("cancelled =", self._cancelled)
-            if not self._cancelled:
-                print("emit", id(self), self._cancelled)
-                self.finished.emit(text)
+            
+            # Читаем стрим
+            for line in self._response.iter_lines(decode_unicode=False):  # ← меняем на False
+                # Проверяем отмену
+                self._mutex.lock()
+                cancelled = self._cancelled
+                self._mutex.unlock()
+    
+                if cancelled:
+                    return
+    
+                if not line:
+                    continue
+    
+                # Декодируем явно в UTF-8
+                try:
+                    line_str = line.decode('utf-8')
+                except UnicodeDecodeError:
+                    continue
+    
+                if not line_str.startswith("data: "):
+                    continue
+    
+                # Парсим JSON
+                data_str = line_str[6:]  # убираем "data: "
+                if data_str == "[DONE]":
+                    break
+    
+                try:
+                    data = json.loads(data_str)
+                    delta = data.get("choices", [{}])[0].get("delta", {})
+                    content = delta.get("content", "")
+        
+                    if content:
+                        self.chunk_received.emit(content)
+            
+                except json.JSONDecodeError:
+                    continue
+            
+            # Проверяем отмену перед финишем
+            self._mutex.lock()
+            cancelled = self._cancelled
+            self._mutex.unlock()
+            
+            if not cancelled:
+                self.finished.emit()
+                
         except requests.exceptions.ConnectionError:
             if not self._cancelled:
                 self.error.emit("Не удалось подключиться — проверь API URL")
@@ -100,19 +163,29 @@ class LMWorker(QObject):
         except requests.exceptions.HTTPError as e:
             if not self._cancelled:
                 status = e.response.status_code if e.response is not None else "?"
-                if status == 401:
-                    self.error.emit("Неверный API ключ (401)")
-                elif status == 404:
-                    self.error.emit("API URL не найден (404) — проверь адрес")
-                else:
-                    self.error.emit(f"Ошибка сервера ({status})")
-        except KeyError:
-            if not self._cancelled:
-                self.error.emit("Неожиданный ответ от модели — возможно модель не загружена")
+                self._handle_http_error(status)
         except Exception as e:
             logging.error(f"Неизвестная ошибка: {type(e).__name__}: {str(e)}", exc_info=True)
             if not self._cancelled:
                 self.error.emit("Неизвестная ошибка — данные в папке \\logs")
+        finally:
+            # Закрываем ресурсы
+            try:
+                if self._response:
+                    self._response.close()
+                if self._session:
+                    self._session.close()
+            except Exception:
+                pass
+
+    def _handle_http_error(self, status):
+        """Обработка HTTP ошибок"""
+        if status == 401:
+            self.error.emit("Неверный API ключ (401)")
+        elif status == 404:
+            self.error.emit("API URL не найден (404) — проверь адрес")
+        else:
+            self.error.emit(f"Ошибка сервера ({status})")
 
 
 class App(QObject):
@@ -123,11 +196,9 @@ class App(QObject):
         self.history = []
         self.thread = None
         self.worker = None
-        self.dot_timer = QTimer()
-        self.dot_timer.timeout.connect(self._animate_dots)
-        self.dot_state = 0
-        self._typing = False
-        self._stop_typing = False
+        self._is_typing = False
+        self._full_response = ""
+        self._current_response = ""
 
         self.window = ChatUI(self.config)
         self.window.send_message.connect(self.on_send)
@@ -135,48 +206,54 @@ class App(QObject):
         self.window.stop_requested.connect(self.on_stop)
         self.window.show()
 
-    def _animate_dots(self):
-        dots = "." * (self.dot_state % 4 + 1)
-        self.window.updateLastMessage(dots)
-        self.dot_state += 1
-
     def _stop_thread(self):
-        """Останавливаем поток без wait — просто сигнализируем о завершении"""
+        """Останавливаем текущий поток и очищаем ресурсы"""
         try:
-            print("worker =", self.worker)
-            print("thread =", self.thread)
             if self.worker is not None:
                 self.worker.cancel()
+                # Даём время на отмену
+                QThread.msleep(100)
+                
             if self.thread is not None:
-                self.thread.quit()
-        except RuntimeError:
-            pass
-        #self.thread = None
-        #self.worker = None
+                if self.thread.isRunning():
+                    self.thread.quit()
+                    if not self.thread.wait(1000):  # ждём до 1 сек
+                        self.thread.terminate()
+                        self.thread.wait()
+                self.thread = None
+                
+            if self.worker is not None:
+                self.worker.deleteLater()
+                self.worker = None
+                
+        except Exception as e:
+            logging.error(f"Ошибка остановки потока: {e}")
 
     def on_stop(self):
-        print("on_stop called, typing=", self._typing)
-        if self._typing:
-            self._stop_typing = True
+        """Обработка кнопки Stop"""
+        if self._is_typing:
+            # Во время печати - просто останавливаем печать
+            self._is_typing = False
             self.window.setStopMode(False)
         else:
-            print("1")
-            self.dot_timer.stop()
-            print("2")
-            #self._stop_thread()
-            print("3")
-            self.window.updateLastMessage("Прервано")
-            print("4")
+            # Во время запроса - прерываем стрим
+            self._stop_thread()
+            current_text = self.window.getLastMessage() 
+            if current_text:
+                self.window.updateLastMessage(f"{current_text} ⏹")
+            else:
+                self.window.updateLastMessage("⏹ Прервано")
             self.window.setStopMode(False)
-            print("5")
+            self._is_typing = False
 
     def on_send(self, text, attachments):
-        # Прерываем текущее если что-то идёт
-        if self._typing:
-            self._stop_typing = True
-        self.dot_timer.stop()
+        # Останавливаем текущий запрос
         self._stop_thread()
+        self._is_typing = False
+        self._full_response = ""
+        self._current_response = ""
 
+        # Формируем контент
         content = [{"type": "text", "text": text}]
 
         IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
@@ -205,65 +282,48 @@ class App(QObject):
 
         self.history.append({"role": "user", "content": content})
 
-        self.window.addMessage("assistant", ".")
-        self.dot_state = 0
-        self.dot_timer.start(400)
+        # Показываем пустое сообщение для ответа
+        self.window.addMessage("assistant", "")
         self.window.setStopMode(True)
 
+        # Запускаем стрим
         self.thread = QThread()
         self.worker = LMWorker(self.history.copy(), self.config)
         self.worker.moveToThread(self.thread)
 
-        self.worker.finished.connect(self.on_finished)
+        self.worker.chunk_received.connect(self.on_chunk_received)
+        self.worker.finished.connect(self.on_stream_finished)
         self.worker.error.connect(self.on_error)
         self.thread.started.connect(self.worker.run)
         self.thread.start()
 
-    def on_finished(self, response_text):
-        self.dot_timer.stop()
-        # Не вызываем wait() — просто quit и обнуляем
-        #try:
-            #if self.thread is not None:
-                #self.thread.quit()
-        #except RuntimeError:
-            #pass
-        #self.thread = None
-        #self.worker = None
+    def on_chunk_received(self, chunk):
+        """Получен новый кусок текста"""
+        self._full_response += chunk
+        self._current_response += chunk
+        self.window.updateLastMessage(self._current_response)
 
-        self.history.append({"role": "assistant", "content": response_text})
-
-        self._current_text = ""
-        self._full_text = response_text
-        self._typing = True
-        self._stop_typing = False
-        self._type_step()
-
-    def _type_step(self):
-        if self._stop_typing:
-            self._typing = False
-            self._stop_typing = False
-            self.window.setStopMode(False)
-            return
-
-        if len(self._current_text) < len(self._full_text):
-            self._current_text = self._full_text[:len(self._current_text) + 1]
-            self.window.updateLastMessage(self._current_text)
-            QTimer.singleShot(15, self._type_step)
-        else:
-            self._typing = False
-            self.window.setStopMode(False)
+    def on_stream_finished(self):
+        """Стрим завершён успешно"""
+        self._stop_thread()
+        self.window.setStopMode(False)
+        
+        # Сохраняем в историю
+        if self._full_response:
+            self.history.append({"role": "assistant", "content": self._full_response})
+        
+        self._is_typing = False
+        self._current_response = ""
+        self._full_response = ""
 
     def on_error(self, error_text):
-        self.dot_timer.stop()
-        try:
-            if self.thread is not None:
-                self.thread.quit()
-        except RuntimeError:
-            pass
-        self.thread = None
-        self.worker = None
-        self.window.updateLastMessage(f"Ошибка: {error_text}")
+        """Ошибка в стриме"""
+        self._stop_thread()
+        self.window.updateLastMessage(f"❌ {error_text}")
         self.window.setStopMode(False)
+        self._is_typing = False
+        self._current_response = ""
+        self._full_response = ""
 
     def on_settings_saved(self, new_config):
         self.config = new_config
