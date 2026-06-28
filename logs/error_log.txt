@@ -162,3 +162,27 @@ Traceback (most recent call last):
     data = self.fp.read(cursize)
            ^^^^^^^^^^^^
 AttributeError: 'NoneType' object has no attribute 'read'
+2026-06-28 22:04:43 [ERROR] Неизвестная ошибка: AttributeError: 'NoneType' object has no attribute 'read'
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 112, in run
+    for line in self._response.iter_lines(decode_unicode=False):  # ← меняем на False
+                ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\models.py", line 1008, in iter_lines
+    for chunk in self.iter_content(
+                 ~~~~~~~~~~~~~~~~~^
+        chunk_size=chunk_size, decode_unicode=decode_unicode
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\models.py", line 937, in generate
+    yield from self.raw.stream(chunk_size, decode_content=True)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\response.py", line 1260, in stream
+    yield from self.read_chunked(amt, decode_content=decode_content)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\response.py", line 1434, in read_chunked
+    chunk = self._handle_chunk(amt)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\response.py", line 1373, in _handle_chunk
+    returned_chunk = self._fp._safe_read(self.chunk_left)  # type: ignore[union-attr]
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 648, in _safe_read
+    data = self.fp.read(cursize)
+           ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'read'
