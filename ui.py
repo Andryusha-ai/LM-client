@@ -221,6 +221,22 @@ class ChatUI(QMainWindow):
         self.image_viewer = ImageViewer(self)
         self.image_viewer.hide()
 
+        # Добавляем флаг для отслеживания, был ли скролл пользователем
+        self._user_scrolled_up = False
+        
+        # Подключаем отслеживание скролла
+
+        self._user_scrolled_up = False
+        self._programmatic_scroll = False  # ← новый флаг для отслеживания программного скролла
+
+        self.scroll_area.verticalScrollBar().sliderPressed.connect(self._on_slider_pressed)
+        self.scroll_area.verticalScrollBar().sliderReleased.connect(self._on_slider_released)
+        self.scroll_area.verticalScrollBar().valueChanged.connect(self._on_scroll_changed)
+
+        # Устанавливаем eventFilter для отслеживания колёсика
+        self.scroll_area.viewport().installEventFilter(self)
+        self.messages_container.installEventFilter(self)
+
     # ---------------------------------------------------------
 
     def _create_input_area(self, parent_layout):
@@ -539,6 +555,21 @@ class ChatUI(QMainWindow):
             event.acceptProposedAction()
             return True
 
+        elif event.type() == QEvent.Wheel:
+            # Если пользователь крутит колёсико в области чата
+            if obj in (self.scroll_area.viewport(), self.messages_container):
+                # Проверяем, достигли ли дна
+                scrollbar = self.scroll_area.verticalScrollBar()
+                current_value = scrollbar.value()
+                max_value = scrollbar.maximum()
+                
+                # Если пользователь крутит вниз и достиг дна — сбрасываем флаг
+                if event.angleDelta().y() < 0:  # Крутим вниз
+                    if current_value >= max_value - 10:
+                        self._user_scrolled_up = False
+                else:  # Крутим вверх
+                    self._user_scrolled_up = True
+
         return super().eventFilter(obj, event)
     
     def _on_settings_clicked(self):
@@ -571,3 +602,110 @@ class ChatUI(QMainWindow):
             if isinstance(last_widget, MessageCard):
                 return last_widget.markdown() 
         return ""
+
+    def _on_slider_pressed(self):
+        """Пользователь начал тянуть ползунок"""
+        self._user_scrolled_up = True
+
+    def _on_slider_released(self):
+        """Пользователь отпустил ползунок"""
+        # Не сбрасываем сразу, проверим позицию
+        self._check_scroll_position()
+
+    def _on_scroll_changed(self, value):
+        """Скролл изменился"""
+        # Игнорируем программные изменения
+        if self._programmatic_scroll:
+            return
+        
+        # Проверяем позицию
+        scrollbar = self.scroll_area.verticalScrollBar()
+        is_at_bottom = value >= scrollbar.maximum() - 5
+        
+        # Если пользователь не внизу — поднимаем флаг
+        if not is_at_bottom:
+            self._user_scrolled_up = True
+        else:
+            self._user_scrolled_up = False
+
+    def _check_scroll_position(self):
+        """Проверяем, находится ли пользователь внизу"""
+        scrollbar = self.scroll_area.verticalScrollBar()
+        # Если ползунок внизу (с допуском 5 пикселей) — сбрасываем флаг
+        if scrollbar.value() >= scrollbar.maximum() - 5:
+            self._user_scrolled_up = False
+        # Если пользователь где-то посередине — оставляем флаг поднятым
+
+    def is_at_bottom(self) -> bool:
+        """Проверяет, находится ли скролл внизу"""
+        scrollbar = self.scroll_area.verticalScrollBar()
+        return scrollbar.value() >= scrollbar.maximum() - 5
+
+    def scroll_to_bottom(self):
+        """Прокрутка вниз, но только если пользователь не скроллил вверх"""
+        # Если пользователь скроллил вверх — не прокручиваем
+        if self._user_scrolled_up:
+            return
+        
+        # Иначе прокручиваем
+        self._programmatic_scroll = True
+        QTimer.singleShot(50, lambda: self.scroll_area.verticalScrollBar().setValue(
+            self.scroll_area.verticalScrollBar().maximum()
+        ))
+
+    def force_scroll_to_bottom(self):
+        """Принудительная прокрутка вниз (для новых сообщений от пользователя)"""
+        self._user_scrolled_up = False
+        self._programmatic_scroll = True
+        QTimer.singleShot(50, lambda: self._do_force_scroll_to_bottom())
+
+    def addMessage(self, role: str, text: str, attachments: list = None):
+        """Добавление нового сообщения — всегда прокручиваем вниз"""
+        self.messages_layout.takeAt(self.messages_layout.count() - 1)
+        card = MessageCard(role, text, attachments=attachments)
+        card.imageClicked.connect(self.showImage)
+        card.fileClicked.connect(self.openFile)
+        self.messages_layout.addWidget(card)
+        self.messages_layout.addStretch()
+        self.message_counter.setText(f"Сообщений: {self.getMessageCount()}")
+        
+        # ПРИНУДИТЕЛЬНАЯ прокрутка для нового сообщения
+        self.force_scroll_to_bottom()
+        return card
+
+    def updateLastMessage(self, text: str):
+        """Обновление последнего сообщения (токены) — прокрутка только если внизу"""
+        count = self.messages_layout.count()
+        if count < 2:
+            return
+        last_widget = self.messages_layout.itemAt(count - 2).widget()
+        if isinstance(last_widget, MessageCard):
+            last_widget.setText(text)
+        
+        # Прокручиваем ТОЛЬКО если пользователь внизу
+        self.scroll_to_bottom()
+
+    def appendToLastMessage(self, text: str):
+        """Добавление к последнему сообщению (токены) — прокрутка только если внизу"""
+        count = self.messages_layout.count()
+        if count < 2:
+            return
+        last_widget = self.messages_layout.itemAt(count - 2).widget()
+        if isinstance(last_widget, MessageCard):
+            last_widget.appendText(text)
+        
+        # Прокручиваем ТОЛЬКО если пользователь внизу
+        self.scroll_to_bottom()
+
+    def _do_scroll_to_bottom(self):
+        """Реальная прокрутка вниз"""
+        scrollbar = self.scroll_area.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+        # Сбрасываем флаг после прокрутки
+        QTimer.singleShot(100, lambda: setattr(self, '_programmatic_scroll', False))
+
+    def _do_force_scroll_to_bottom(self):
+        """Реальная принудительная прокрутка"""
+        scrollbar = self.scroll_area.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+        QTimer.singleShot(100, lambda: setattr(self, '_programmatic_scroll', False))
