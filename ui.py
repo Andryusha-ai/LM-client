@@ -1,7 +1,7 @@
 # ui.py
 import os
 from PySide6.QtCore import Qt, Signal, QTimer, QEvent
-from PySide6.QtGui import QPainter, QColor, QPen
+from PySide6.QtGui import QPainter, QColor, QPen, QIcon
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -13,6 +13,10 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QLabel,
     QFrame,
+    QDialog,
+    QFormLayout,
+    QLineEdit,
+    QPushButton
 )
 from pathlib import Path
 from datetime import datetime
@@ -23,16 +27,52 @@ from widgets.message_input import MessageInput
 from widgets.attachment_bar import AttachmentBar
 from widgets.image_viewer import ImageViewer
 
+class SettingsDialog(QDialog):
+    def __init__(self, current_api_url, current_api_key, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Настройки подключения")
+        self.setMinimumWidth(350)
+        
+        layout = QFormLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
+
+        # Поля ввода
+        self.api_url_input = QLineEdit(current_api_url)
+        self.api_key_input = QLineEdit(current_api_key)
+        self.api_key_input.setEchoMode(QLineEdit.Password) # Чтобы ключ звёздочками закрывался
+
+        layout.addRow("API URL:", self.api_url_input)
+        layout.addRow("API Ключ:", self.api_key_input)
+
+        # Кнопка сохранения
+        self.save_button = QPushButton("Сохранить")
+        self.save_button.clicked.connect(self.accept) # Закрывает диалог с кодом QDialog.Accepted
+        layout.addRow(self.save_button)
+
+    def get_values(self):
+        return {
+            "api_url": self.api_url_input.text().strip(),
+            "api_key": self.api_key_input.text().strip()
+        }
+
 class SmartButton(QPushButton):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._is_send_mode = False
+        self._mode = "mic"  # "mic" | "send" | "stop"
         self.setFixedSize(44, 44)
         self.setCursor(Qt.PointingHandCursor)
 
     def setSendMode(self, enabled: bool):
-        self._is_send_mode = enabled
+        if self._mode == "stop":
+            return
+        self._mode = "send" if enabled else "mic"
         self.setToolTip("Отправить" if enabled else "Запись голоса")
+        self.update()
+
+    def setStopMode(self, enabled: bool):
+        self._mode = "stop" if enabled else "mic"
+        self.setToolTip("Остановить" if enabled else "Запись голоса")
         self.update()
 
     def paintEvent(self, event):
@@ -41,12 +81,16 @@ class SmartButton(QPushButton):
         painter.setRenderHint(QPainter.Antialiasing)
         cx, cy = self.width() // 2, self.height() // 2
 
-        if self._is_send_mode:
+        if self._mode == "send":
             pen = QPen(QColor("#ffffff"), 2)
             painter.setPen(pen)
             painter.drawLine(cx - 8, cy + 6, cx + 8, cy - 6)
             painter.drawLine(cx + 8, cy - 6, cx + 1, cy - 6)
             painter.drawLine(cx + 8, cy - 6, cx + 8, cy + 1)
+        elif self._mode == "stop":
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor("#ffffff"))
+            painter.drawRect(cx - 8, cy - 8, 16, 16)
         else:
             pen = QPen(QColor("#555555"), 2)
             painter.setPen(pen)
@@ -59,7 +103,6 @@ class SmartButton(QPushButton):
                 y = cy - h // 2
                 painter.drawRoundedRect(x, y, w, h, 2, 2)
 
-
 class PlusButton(QPushButton):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -71,23 +114,68 @@ class PlusButton(QPushButton):
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
+        icon = QIcon("assets/icons/plus.svg")
+        pixmap = icon.pixmap(18, 18)
+
+        x = (self.width() - pixmap.width()) // 2
+        y = (self.height() - pixmap.height()) // 2
+
+        painter.drawPixmap(x, y, pixmap)
+
+        """
+        Не используется: 
         pen = QPen(QColor("#666666"), 2)
         painter.setPen(pen)
         cx, cy = self.width() // 2, self.height() // 2
         painter.drawLine(cx, cy - 8, cx, cy + 8)
         painter.drawLine(cx - 8, cy, cx + 8, cy)
+        """
+
+class SettingsButton(QPushButton):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(36, 36)
+        #self.setFlat(True)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip("Настройки")
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        icon = QIcon("assets/icons/settings.svg")
+        pixmap = icon.pixmap(18, 18)
+
+        x = (self.width() - pixmap.width()) // 2
+        y = (self.height() - pixmap.height()) // 2
+
+        painter.drawPixmap(x, y, pixmap)
+        """
+        Не используется:
+        font = painter.font()
+        font.setPointSize(12)
+        painter.setFont(font)
+
+        painter.setPen(QColor("#666666"))
+        painter.drawText(self.rect(), Qt.AlignCenter, "⚙")
+        """  
 
 
 class ChatUI(QMainWindow):
     send_message = Signal(str, list)
+    settings_saved = Signal(dict)
     clear_history = Signal()
+    stop_requested = Signal()
     
 
-    def __init__(self, parent=None):
+    def __init__(self, config, parent=None):
         super().__init__(parent)
 
         self.setWindowTitle("AI Ассистент")
         self.setMinimumSize(800, 600)
+        self.config = config
 
         central_widget = QWidget()
         central_widget.setAcceptDrops(True)
@@ -162,6 +250,13 @@ class ChatUI(QMainWindow):
         self.attach_button.clicked.connect(self._on_attach_clicked)
         row.addWidget(self.attach_button)
 
+        self.settings_button = SettingsButton()
+        self.settings_button.setObjectName("settingsBtn")
+        self.settings_button.clicked.connect(self._on_settings_clicked)
+        row.addWidget(self.settings_button)
+
+        self.smart_button = SmartButton()
+
         self.smart_button = SmartButton()
         self.smart_button.setObjectName("smartBtn")
         self.smart_button.clicked.connect(self._on_smart_clicked)
@@ -234,6 +329,13 @@ class ChatUI(QMainWindow):
             }
             QPushButton#attachBtn:hover { background-color: #e0e0e0; }
 
+            QPushButton#settingsBtn {
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+            }
+            QPushButton#settingsBtn:hover { background-color: #e0e0e0; }
+
             QPushButton#smartBtn {
                 background-color: #e0e0e0;
                 border: none;
@@ -242,6 +344,8 @@ class ChatUI(QMainWindow):
             QPushButton#smartBtn:hover { background-color: #d0d0d0; }
             QPushButton#smartBtn[sendMode="true"] { background-color: #2563eb; }
             QPushButton#smartBtn[sendMode="true"]:hover { background-color: #1d4ed8; }
+            QPushButton#smartBtn[stopMode="true"] { background-color: #dc2626; }
+            QPushButton#smartBtn[stopMode="true"]:hover { background-color: #b91c1c; }
             QPushButton#smartBtn:disabled { background-color: #e0e0e0; }
 
             QWidget#statusBar {
@@ -260,7 +364,9 @@ class ChatUI(QMainWindow):
         self.smart_button.style().polish(self.smart_button)
 
     def _on_smart_clicked(self):
-        if self.message_input.message():
+        if self.smart_button._mode == "stop":
+            self.stop_requested.emit()
+        elif self.message_input.message():
             self._on_send_requested()
         else:
             self.setStatus("🎤 Запись голоса (скоро...)", 2000)
@@ -358,10 +464,15 @@ class ChatUI(QMainWindow):
         ))
 
     def setSendEnabled(self, enabled: bool):
-        self.smart_button.setEnabled(enabled)
-        self.message_input.setEnabled(enabled)
-        self.attach_button.setEnabled(enabled)
+        # Ввод никогда не блокируем — пользователь может набирать следующее
         self.setStatus("Готов" if enabled else "Ожидание ответа...", 0 if not enabled else 1)
+
+    def setStopMode(self, enabled: bool):
+        self.smart_button.setStopMode(enabled)
+        # Обновляем QSS цвет кнопки
+        self.smart_button.setProperty("stopMode", "true" if enabled else "false")
+        self.smart_button.style().unpolish(self.smart_button)
+        self.smart_button.style().polish(self.smart_button)
 
     def getInputText(self) -> str:
         return self.message_input.message()
@@ -373,6 +484,7 @@ class ChatUI(QMainWindow):
         self.message_input.setFocus()
 
     def closeEvent(self, event):
+        print("closeEvent called")
         event.accept()
 
     def showImage(self, path):
@@ -428,3 +540,27 @@ class ChatUI(QMainWindow):
             return True
 
         return super().eventFilter(obj, event)
+    
+    def _on_settings_clicked(self):
+        # 1. Вытаскиваем текущие значения прямо из твоего словаря self.config
+        current_url = self.config.get("api_url", "http://127.0.0.1:1234/v1")
+        current_key = self.config.get("api_key", "")
+
+        # 2. Показываем наш диалог (не забудь импортировать SettingsDialog, если вынес его в отдельный файл)
+        dialog = SettingsDialog(current_url, current_key, self)
+        
+        if dialog.exec() == QDialog.Accepted:
+            new_values = dialog.get_values()
+            
+            # 3. Обновляем текущий словарь конфигурации в UI
+            self.config.update(new_values)
+            
+            # 4. Импортируем (если еще не импортировано в ui.py) и вызываем сохранение в файл
+            from config import save_config
+            save_config(self.config)
+            
+            # 5. Пинаем сигнал наружу (в main.py), если какому-то бэкенду/клиенту нужно 
+            # на лету пересоздать сессию с новым ключом или URL
+            self.settings_saved.emit(self.config)
+            
+            self.setStatus("⚙️ Настройки сохранены в config.json", 2000)

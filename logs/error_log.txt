@@ -1,0 +1,26 @@
+2026-06-28 20:09:33 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 153, in on_send
+    self._cleanup_thread()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\Project_LM-client\Assistant.py", line 111, in _cleanup_thread
+    if self.thread.isRunning():
+       ~~~~~~~~~~~~~~~~~~~~~^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtCore.QThread) already deleted.
+
+2026-06-28 20:16:05 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 153, in on_send
+    self._cleanup_thread()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\Project_LM-client\Assistant.py", line 111, in _cleanup_thread
+    if self.thread.isRunning():
+       ~~~~~~~~~~~~~~~~~~~~~^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtCore.QThread) already deleted.
+
+2026-06-28 20:18:14 [ERROR] Ошибка в LMWorker: KeyError: 'choices'
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 76, in run
+    text = response.json()["choices"][0]["message"]["content"]
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'choices'
