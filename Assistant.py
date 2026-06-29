@@ -89,14 +89,27 @@ class LMWorker(QObject):
         """Запуск стрим-запроса"""
         try:
             self._session = requests.Session()
-            
+            messages = self.messages.copy()
+            persona = self.config.get("persona", "")  
+            # Если выбрана персона, добавляем системный промпт
+            if persona and persona != "Без личности":
+                persona_path = Path("personas") / f"{persona}.txt"
+                if persona_path.exists():
+                    try:
+                        with open(persona_path, "r", encoding="utf-8") as f:
+                            system_prompt = f.read()
+                            # Добавляем системное сообщение в начало
+                            messages.insert(0, {"role": "system", "content": system_prompt})
+                    except Exception:
+                        pass   
+       
             # Отправляем запрос в стрим-режиме
             self._response = self._session.post(
                 self.config['api_url'],
                 headers={"Authorization": f"Bearer {self.config['api_key']}"},
                 json={
                     "model": MODEL_NAME,
-                    "messages": self.messages,
+                    "messages": messages,
                     "stream": True,
                 },
                 stream=True,

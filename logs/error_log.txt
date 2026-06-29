@@ -186,3 +186,55 @@ Traceback (most recent call last):
     data = self.fp.read(cursize)
            ^^^^^^^^^^^^
 AttributeError: 'NoneType' object has no attribute 'read'
+2026-06-29 18:08:10 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 334, in <module>
+    assistant = App()
+  File "D:\Project_LM-client\Assistant.py", line 203, in __init__
+    self.window = ChatUI(self.config)
+                  ~~~~~~^^^^^^^^^^^^^
+  File "D:\Project_LM-client\ui.py", line 434, in __init__
+    self._create_input_area(main_layout)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "D:\Project_LM-client\ui.py", line 478, in _create_input_area
+    self.message_input.fileDropped.connect(self._on_file_dropped)
+                                           ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ChatUI' object has no attribute '_on_file_dropped'
+
+2026-06-29 18:22:41 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\ui.py", line 1183, in _on_settings_clicked
+    dialog = SettingsDialog(current_url, current_key, self)
+  File "D:\Project_LM-client\ui.py", line 129, in __init__
+    self.tab_widget = QTabWidget()
+                      ^^^^^^^^^^
+NameError: name 'QTabWidget' is not defined. Did you mean: 'QWidget'?
+
+2026-06-29 18:23:44 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\ui.py", line 1186, in _on_settings_clicked
+    dialog = SettingsDialog(current_url, current_key, self)
+  File "D:\Project_LM-client\ui.py", line 470, in __init__
+    index = self.persona_combo.findText(current_persona)
+TypeError: 'PySide6.QtWidgets.QComboBox.findText' called with wrong argument types:
+  PySide6.QtWidgets.QComboBox.findText(ChatUI)
+Supported signatures:
+  PySide6.QtWidgets.QComboBox.findText(text: str, /, flags: PySide6.QtCore.Qt.MatchFlag = Instance(Qt.MatchFlags(Qt.MatchExactly | Qt.MatchCaseSensitive)))
+
+2026-06-29 18:25:04 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\ui.py", line 1186, in _on_settings_clicked
+    dialog = SettingsDialog(current_url, current_key, current_persona, self)
+                                                      ^^^^^^^^^^^^^^^
+NameError: name 'current_persona' is not defined
+
+2026-06-29 19:21:01 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\settings_dialog.py", line 665, in _on_preset_changed
+    self.delete_preset_btn.setEnabled(is_preset)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+TypeError: 'PySide6.QtWidgets.QWidget.setEnabled' called with wrong argument types:
+  PySide6.QtWidgets.QWidget.setEnabled(str)
+Supported signatures:
+  PySide6.QtWidgets.QWidget.setEnabled(arg__1: bool, /)
+

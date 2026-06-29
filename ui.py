@@ -16,259 +16,20 @@ from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
     QLineEdit,
-    QPushButton
+    QPushButton,
+    QTabWidget,     
+    QComboBox,      
+    QTextEdit  
 )
 from pathlib import Path
 from datetime import datetime
 from cache_manager import CacheManager
+from settings_dialog import SettingsDialog
 
 from widgets.message_card import MessageCard
 from widgets.message_input import MessageInput
 from widgets.attachment_bar import AttachmentBar
 from widgets.image_viewer import ImageViewer
-
-"""
-Устарело, заменено:
-class SettingsDialog(QDialog):
-    def __init__(self, current_api_url, current_api_key, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Настройки подключения")
-        self.setMinimumWidth(550)
-        self.setMinimumHeight(240)
-        
-        layout = QFormLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(15, 15, 15, 15)
-
-        # Поля ввода
-        self.api_url_input = QLineEdit(current_api_url)
-        self.api_key_input = QLineEdit(current_api_key)
-        self.api_key_input.setEchoMode(QLineEdit.Password) # Чтобы ключ звёздочками закрывался
-
-        layout.addRow("API URL:", self.api_url_input)
-        layout.addRow("API Ключ:", self.api_key_input)
-
-        # Кнопка сохранения
-        self.save_button = QPushButton("Сохранить")
-        self.save_button.clicked.connect(self.accept) # Закрывает диалог с кодом QDialog.Accepted
-        layout.addRow(self.save_button)
-
-    def get_values(self):
-        return {
-            "api_url": self.api_url_input.text().strip(),
-            "api_key": self.api_key_input.text().strip()
-        }
-"""
-
-# ui.py - обновлённый SettingsDialog
-
-class SettingsDialog(QDialog):
-    def __init__(self, current_api_url, current_api_key, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Настройки подключения")
-        self.setMinimumWidth(550)
-        self.setMinimumHeight(240)
-        
-        # Убираем стандартные кнопки и заголовок
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
-        self.setWindowFlag(Qt.FramelessWindowHint)  # ← убираем виндовый заголовок
-        
-        # Фон как у основной программы
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #f7f7f8;
-                border-radius: 12px;
-                border: 1px solid #e5e5e5;
-            }
-        """)
-        
-        # Основной контейнер
-        main_widget = QWidget()
-        main_layout = QVBoxLayout(main_widget)
-        main_layout.setContentsMargins(24, 20, 24, 20)
-        main_layout.setSpacing(16)
-        
-        # Заголовок (свой, без виндового)
-        title = QLabel("⚙️ Настройки подключения")
-        title.setStyleSheet("""
-            QLabel {
-                font-size: 18px;
-                font-weight: 600;
-                color: #111111;
-                padding-bottom: 8px;
-                background: transparent;
-            }
-        """)
-        main_layout.addWidget(title)
-        
-        # Поля ввода
-        fields_widget = QWidget()
-        fields_widget.setStyleSheet("background: transparent;")
-        fields_layout = QVBoxLayout(fields_widget)
-        fields_layout.setSpacing(12)
-        
-        # API URL
-        url_label = QLabel("API URL")
-        url_label.setStyleSheet("color: #444444; font-size: 13px; font-weight: 500; background: transparent;")
-        self.api_url_input = QLineEdit(current_api_url)
-        self.api_url_input.setPlaceholderText("http://127.0.0.1:1234/v1/chat/completions")
-        self.api_url_input.setMinimumHeight(40)  # ← выше для удобства
-        self.api_url_input.setStyleSheet("""
-            QLineEdit {
-                background: #f0f0f0;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                padding: 8px 14px;
-                font-size: 14px;
-                color: #111111;
-            }
-            QLineEdit:focus {
-                border: 2px solid #2563eb;
-                background: #ffffff;
-            }
-        """)
-        fields_layout.addWidget(url_label)
-        fields_layout.addWidget(self.api_url_input)
-        
-        # API Ключ
-        key_label = QLabel("API Ключ")
-        key_label.setStyleSheet("color: #444444; font-size: 13px; font-weight: 500; background: transparent;")
-        
-        # Контейнер для ключа с кнопкой показа
-        key_container = QWidget()
-        key_container.setStyleSheet("background: transparent;")
-        key_layout = QHBoxLayout(key_container)
-        key_layout.setContentsMargins(0, 0, 0, 0)
-        key_layout.setSpacing(8)
-        
-        self.api_key_input = QLineEdit(current_api_key)
-        self.api_key_input.setPlaceholderText("Введите API ключ (если требуется)")
-        self.api_key_input.setEchoMode(QLineEdit.Password)
-        self.api_key_input.setMinimumHeight(40)  # ← выше для удобства
-        self.api_key_input.setStyleSheet("""
-            QLineEdit {
-                background: #f0f0f0;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                padding: 8px 14px;
-                font-size: 14px;
-                color: #111111;
-            }
-            QLineEdit:focus {
-                border: 2px solid #2563eb;
-                background: #ffffff;
-            }
-        """)
-        key_layout.addWidget(self.api_key_input, stretch=1)
-        
-        # Кнопка показа/скрытия ключа
-        self.show_key_btn = QPushButton("👁")
-        self.show_key_btn.setFixedSize(40, 40)  # ← под размер полей
-        self.show_key_btn.setCursor(Qt.PointingHandCursor)
-        self.show_key_btn.setToolTip("Показать/скрыть ключ")
-        self.show_key_btn.setStyleSheet("""
-            QPushButton {
-                background: #f0f0f0;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                font-size: 16px;
-            }
-            QPushButton:hover {
-                background: #e0e0e0;
-            }
-            QPushButton:pressed {
-                background: #d0d0d0;
-            }
-        """)
-        self.show_key_btn.clicked.connect(self._toggle_key_visibility)
-        key_layout.addWidget(self.show_key_btn)
-        
-        fields_layout.addWidget(key_label)
-        fields_layout.addWidget(key_container)
-        
-        main_layout.addWidget(fields_widget)
-        main_layout.addStretch()
-        
-        # Кнопки
-        buttons_widget = QWidget()
-        buttons_widget.setStyleSheet("background: transparent;")
-        buttons_layout = QHBoxLayout(buttons_widget)
-        buttons_layout.setContentsMargins(0, 0, 0, 0)
-        buttons_layout.setSpacing(10)
-        buttons_layout.addStretch()
-        
-        # Кнопка Cancel
-        cancel_btn = QPushButton("Отмена")
-        cancel_btn.setFixedWidth(100)
-        cancel_btn.setFixedHeight(40)
-        cancel_btn.setCursor(Qt.PointingHandCursor)
-        cancel_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                border: 1px solid #d0d0d0;
-                border-radius: 8px;
-                padding: 8px 16px;
-                font-size: 13px;
-                color: #555555;
-            }
-            QPushButton:hover {
-                background: #f0f0f0;
-                border-color: #bbbbbb;
-            }
-            QPushButton:pressed {
-                background: #e5e5e5;
-            }
-        """)
-        cancel_btn.clicked.connect(self.reject)
-        buttons_layout.addWidget(cancel_btn)
-        
-        # Кнопка Save
-        self.save_button = QPushButton("💾 Сохранить")
-        self.save_button.setFixedWidth(120)
-        self.save_button.setFixedHeight(40)
-        self.save_button.setCursor(Qt.PointingHandCursor)
-        self.save_button.setStyleSheet("""
-            QPushButton {
-                background: #2563eb;
-                border: none;
-                border-radius: 8px;
-                padding: 8px 16px;
-                font-size: 13px;
-                font-weight: 500;
-                color: #ffffff;
-            }
-            QPushButton:hover {
-                background: #1d4ed8;
-            }
-            QPushButton:pressed {
-                background: #1e40af;
-            }
-        """)
-        self.save_button.clicked.connect(self.accept)
-        buttons_layout.addWidget(self.save_button)
-        
-        main_layout.addWidget(buttons_widget)
-        
-        # Устанавливаем основной layout
-        self.setLayout(main_layout)
-        
-        # Фокус на поле URL
-        self.api_url_input.setFocus()
-    
-    def _toggle_key_visibility(self):
-        """Переключение видимости ключа"""
-        if self.api_key_input.echoMode() == QLineEdit.Password:
-            self.api_key_input.setEchoMode(QLineEdit.Normal)
-            self.show_key_btn.setText("🙈")
-        else:
-            self.api_key_input.setEchoMode(QLineEdit.Password)
-            self.show_key_btn.setText("👁")
-
-    def get_values(self):
-        return {
-            "api_url": self.api_url_input.text().strip(),
-            "api_key": self.api_key_input.text().strip()
-        }
 
 class SmartButton(QPushButton):
     def __init__(self, parent=None):
@@ -475,10 +236,12 @@ class ChatUI(QMainWindow):
 
         self.message_input = MessageInput()
         self.message_input.imagePasted.connect(self.on_image_pasted)
+        self.message_input.fileDropped.connect(self._on_file_dropped)
         self.message_input.setObjectName("messageInput")
         self.message_input.sendRequested.connect(self._on_send_requested)
         self.message_input.textChanged2.connect(self._on_text_changed)
         row.addWidget(self.message_input, stretch=1)
+
 
         self.attach_button = PlusButton()
         self.attach_button.setObjectName("attachBtn")
@@ -793,11 +556,9 @@ class ChatUI(QMainWindow):
     
     def _on_settings_clicked(self):
 
-        current_url = self.config.get("api_url", "http://127.0.0.1:1234/v1")
-        current_key = self.config.get("api_key", "")
+        from settings_dialog import SettingsDialog
 
-
-        dialog = SettingsDialog(current_url, current_key, self)
+        dialog = SettingsDialog(self.config, self)
         
         if dialog.exec() == QDialog.Accepted:
             new_values = dialog.get_values()
@@ -940,3 +701,11 @@ class ChatUI(QMainWindow):
         # Отправляем системное сообщение о нажатии PrtSc
         ctypes.windll.user32.keybd_event(0x2C, 0, 0, 0)  # VK_SNAPSHOT = 0x2C
         ctypes.windll.user32.keybd_event(0x2C, 0, 0x0002, 0)  # KEYEVENTF_KEYUP
+
+    def _on_file_dropped(self, path):
+        """Обработка файла, брошенного в поле ввода"""
+        # Добавляем файл в attachment_bar
+        self.attachment_bar.addAttachment(path)
+        # Показываем attachment_bar если скрыт
+        if not self.attachment_bar.isVisible():
+            self.attachment_bar.setVisible(True)
