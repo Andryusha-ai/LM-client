@@ -2,5 +2,6 @@
   "name": "Основной конфиг",
   "api_url": "http://localhost:1234/v1/chat/completions",
   "api_key": "sk-lm-vZmTYDyw:kh9AZHdIMoeBbB78bw8s",
+  "model": "local_model",
   "persona": "➕ Новая личность"
 }

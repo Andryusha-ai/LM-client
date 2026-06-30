@@ -12,7 +12,7 @@ from pathlib import Path
 from cache_manager import CacheManager
 from config import load_config, save_config
 
-MODEL_NAME = "local-model"
+#MODEL_NAME = "deepseek-v4-flash"
 CacheManager.init()
 LOGS_DIR = Path("logs")
 LOGS_DIR.mkdir(exist_ok=True)
@@ -91,6 +91,7 @@ class LMWorker(QObject):
             self._session = requests.Session()
             messages = self.messages.copy()
             persona = self.config.get("persona", "")  
+            model_name = self.config.get("model", "openrouter/free")
             # Если выбрана персона, добавляем системный промпт
             if persona and persona != "Без личности":
                 persona_path = Path("personas") / f"{persona}.txt"
@@ -108,7 +109,7 @@ class LMWorker(QObject):
                 self.config['api_url'],
                 headers={"Authorization": f"Bearer {self.config['api_key']}"},
                 json={
-                    "model": MODEL_NAME,
+                    "model": model_name,  
                     "messages": messages,
                     "stream": True,
                 },

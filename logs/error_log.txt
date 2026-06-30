@@ -238,3 +238,13 @@ TypeError: 'PySide6.QtWidgets.QWidget.setEnabled' called with wrong argument typ
 Supported signatures:
   PySide6.QtWidgets.QWidget.setEnabled(arg__1: bool, /)
 
+2026-06-30 08:35:47 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\settings_dialog.py", line 734, in accept
+    self._save_current_as_preset()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\Project_LM-client\settings_dialog.py", line 684, in _save_current_as_preset
+    f"Обновить пресет '{name}' текущими настройками?",
+                        ^^^^
+UnboundLocalError: cannot access local variable 'name' where it is not associated with a value
+

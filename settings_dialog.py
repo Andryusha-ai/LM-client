@@ -262,6 +262,30 @@ class SettingsDialog(QDialog):
         key_layout.setContentsMargins(0, 0, 0, 0)
         key_layout.setSpacing(8)
 
+        # Модель
+        model_label = QLabel("Модель")
+        model_label.setStyleSheet("color: #444444; font-size: 13px; font-weight: 500; background: transparent;")
+        config_layout.addWidget(model_label)
+
+        self.model_input = QLineEdit()
+        self.model_input.setPlaceholderText("openrouter/free")
+        self.model_input.setMinimumHeight(40)
+        self.model_input.setStyleSheet("""
+            QLineEdit {
+                background: #f0f0f0;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 8px 14px;
+                font-size: 14px;
+                color: #111111;
+            }
+            QLineEdit:focus {
+                border: 2px solid #2563eb;
+                background: #ffffff;
+            }
+        """)
+        config_layout.addWidget(self.model_input)
+
         self.api_key_input = QLineEdit()
         self.api_key_input.setPlaceholderText("Введите API ключ (если требуется)")
         self.api_key_input.setEchoMode(QLineEdit.Password)
@@ -611,6 +635,7 @@ class SettingsDialog(QDialog):
                         data = json.load(f)
                         self.api_url_input.setText(data.get("api_url", ""))
                         self.api_key_input.setText(data.get("api_key", ""))
+                        self.model_input.setText(data.get("model", "openrouter/free"))
                         persona = data.get("persona", "Без личности")
                         index = self.persona_combo.findText(persona)
                         if index >= 0:
@@ -629,13 +654,14 @@ class SettingsDialog(QDialog):
         current_data = {
             "api_url": self.api_url_input.text().strip(),
             "api_key": self.api_key_input.text().strip(),
+            "model": self.model_input.text().strip(),
             "persona": self.persona_combo.currentText()
         }
         if current_data["persona"] == "➕ Новая личность":
             persona_name = self.persona_name_input.text().strip()
             if persona_name:
                 current_data["persona"] = persona_name
-
+        name = self.preset_name_input.text().strip()
         if current_preset and current_preset != "➕ Новый пресет":
             preset_file = self.presets_dir / f"{current_preset}.json"
             if preset_file.exists():
@@ -645,6 +671,7 @@ class SettingsDialog(QDialog):
                         # Сравниваем текущие настройки с сохранёнными
                         if (saved_data.get("api_url", "") == current_data["api_url"] and
                             saved_data.get("api_key", "") == current_data["api_key"] and
+                            saved_data.get("model", "") == current_data["model"] and
                             saved_data.get("persona", "") == current_data["persona"]):
                             # Ничего не изменилось — сохранять не нужно
                             return
@@ -660,7 +687,6 @@ class SettingsDialog(QDialog):
             if reply == QMessageBox.No:
                 return
         else:
-            name = self.preset_name_input.text().strip()
             if not name:
                 QMessageBox.warning(self, "Ошибка", "Введите имя пресета")
                 return
@@ -669,6 +695,7 @@ class SettingsDialog(QDialog):
             "name": name,
             "api_url": self.api_url_input.text().strip(),
             "api_key": self.api_key_input.text().strip(),
+            "model": self.model_input.text().strip(), 
             "persona": self.persona_combo.currentText()
         }
 
@@ -921,6 +948,7 @@ class SettingsDialog(QDialog):
 
         self.api_url_input.setText(self.current_config.get("api_url", ""))
         self.api_key_input.setText(self.current_config.get("api_key", ""))
+        self.model_input.setText(self.current_config.get("model", "openrouter/free"))
 
         persona = self.current_config.get("persona", "Без личности")
         if persona and persona != "Без личности":
@@ -963,6 +991,7 @@ class SettingsDialog(QDialog):
         return {
             "api_url": self.api_url_input.text().strip(),
             "api_key": self.api_key_input.text().strip(),
+            "model": self.model_input.text().strip(),
             "persona": persona,
             "current_preset": self.preset_combo.currentText() if self.preset_combo.currentText() != "➕ Новый пресет" else ""
         }
