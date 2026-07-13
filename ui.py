@@ -30,6 +30,7 @@ from widgets.message_card import MessageCard
 from widgets.message_input import MessageInput
 from widgets.attachment_bar import AttachmentBar
 from widgets.image_viewer import ImageViewer
+from widgets.left_bar import LeftBar
 
 class SmartButton(QPushButton):
     def __init__(self, parent=None):
@@ -143,6 +144,7 @@ class ChatUI(QMainWindow):
     settings_saved = Signal(dict)
     clear_history = Signal()
     stop_requested = Signal()
+    chat_selected = Signal(str)  # излучается при выборе чата в сайдбаре (имя файла .json)
     
 
     def __init__(self, config, parent=None):
@@ -157,12 +159,24 @@ class ChatUI(QMainWindow):
         self.prtsc_shortcut.setContext(Qt.ApplicationShortcut)  # Глобальный для всего приложения
         self.prtsc_shortcut.activated.connect(self._on_prtsc_pressed)
 
+        # --- Корневой виджет: сайдбар слева + область чата справа ---
+        root_widget = QWidget()
+        self.setCentralWidget(root_widget)
+
+        root_layout = QHBoxLayout(root_widget)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        # Сайдбар со списком чатов
+        self.left_bar = LeftBar(history_dir="history", parent=self)
+        self.left_bar.setFixedWidth(300)
+        root_layout.addWidget(self.left_bar)
+
+        # Область чата (всё, что раньше было central_widget)
         central_widget = QWidget()
         central_widget.setAcceptDrops(True)
-        self.setCentralWidget(central_widget)
-
-        central_widget.setAcceptDrops(True)
         central_widget.installEventFilter(self)
+        root_layout.addWidget(central_widget, stretch=1)
 
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -195,7 +209,9 @@ class ChatUI(QMainWindow):
         self._create_input_area(main_layout)
 
         # Статус-бар
-        self._create_statusbar()
+        self._create_statusbar(main_layout)
+        self.set_input_enabled(False)
+        self.setStatus("Выберите чат или создайте новый")
 
         self._apply_styles()
         self.image_viewer = ImageViewer(self)
@@ -265,7 +281,7 @@ class ChatUI(QMainWindow):
 
     # ---------------------------------------------------------
 
-    def _create_statusbar(self):
+    def _create_statusbar(self, parent_layout):
         status_widget = QWidget()
         status_widget.setObjectName("statusBar")
         status_widget.setFixedHeight(24)
@@ -283,7 +299,10 @@ class ChatUI(QMainWindow):
         self.message_counter.setObjectName("statusLabel")
         layout.addWidget(self.message_counter)
 
-        self.centralWidget().layout().addWidget(status_widget)
+        # Раньше здесь было self.centralWidget().layout().addWidget(...),
+        # но centralWidget() теперь возвращает корневой QHBoxLayout (сайдбар + чат),
+        # а статус-бар должен идти в вертикальный layout области чата
+        parent_layout.addWidget(status_widget)
 
     # ---------------------------------------------------------
 
@@ -554,6 +573,16 @@ class ChatUI(QMainWindow):
 
         return super().eventFilter(obj, event)
     
+    def switch_to_chat(self, filename: str):
+        """
+        Вызывается из LeftBar при выборе чата в сайдбаре.
+        Сама загрузку истории из файла UI не делает (это ответственность
+        того, кто создаёт ChatUI) — просто пробрасывает сигнал наружу.
+        Подключите к нему реальную загрузку сообщений, например:
+            chat_ui.chat_selected.connect(chat_manager.load_chat)
+        """
+        self.chat_selected.emit(filename)
+
     def _on_settings_clicked(self):
 
         from settings_dialog import SettingsDialog
@@ -709,3 +738,23 @@ class ChatUI(QMainWindow):
         # Показываем attachment_bar если скрыт
         if not self.attachment_bar.isVisible():
             self.attachment_bar.setVisible(True)
+
+    def set_input_enabled(self, enabled: bool):
+        """Блокирует или разблокирует поле ввода и кнопки"""
+        self.message_input.setEnabled(enabled)
+        self.attach_button.setEnabled(enabled)
+        self.smart_button.setEnabled(enabled)
+        self.settings_button.setEnabled(enabled)
+
+        # Если ввод заблокирован — сбрасываем стейт кнопки
+        if not enabled:
+            self.smart_button.setSendMode(False)
+            self.smart_button.setProperty("sendMode", "false")
+            self.smart_button.style().unpolish(self.smart_button)
+            self.smart_button.style().polish(self.smart_button)
+
+        # Статус
+        if enabled:
+            self.setStatus("Выберите чат или создайте новый")
+        else:
+            self.setStatus("Готов")

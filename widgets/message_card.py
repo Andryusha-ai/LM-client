@@ -166,16 +166,64 @@ class MessageCard(QFrame):
         if '<li' in text:
             text = re.sub(r'(<li.*?</li>)', r'<ul style="margin: 4px 0; padding: 0;">\1</ul>', text, flags=re.DOTALL)
 
-        # Нумерованные списки
-        text = re.sub(r'^(\d+)\. (.*?)$', r'<li style="margin-left: 20px;">\2</li>', text, flags=re.M)
-        if '<li' in text:
-            text = re.sub(r'(<li.*?</li>)', r'<ol style="margin: 4px 0; padding: 0;">\1</ol>', text, flags=re.DOTALL)
+        # Нумерованные списки — обрабатываем строки, начинающиеся с цифры и точки
+        lines = text.split('\n')
+        new_lines = []
+        in_ol = False
+        ol_buffer = []
+
+        for line in lines:
+            # Проверяем, является ли строка элементом нумерованного списка
+            match = re.match(r'^(\d+)\. (.*?)$', line)
+            if match:
+                # Если это элемент списка — добавляем в буфер
+                in_ol = True
+                ol_buffer.append(f'<li style="margin-left: 20px;">{match.group(2)}</li>')
+            else:
+                # Если буфер не пустой — закрываем список
+                if ol_buffer:
+                    new_lines.append(f'<ol style="margin: 4px 0; padding: 0;">{"".join(ol_buffer)}</ol>')
+                    ol_buffer = []
+                    in_ol = False
+                # Добавляем обычную строку
+                new_lines.append(line)
+
+        # Если в конце остался открытый список
+        if ol_buffer:
+            new_lines.append(f'<ol style="margin: 4px 0; padding: 0;">{"".join(ol_buffer)}</ol>')
+
+        text = '\n'.join(new_lines)
 
         # Горизонтальная линия
         text = re.sub(r'^---$', r'<hr style="border: none; border-top: 1px solid #e0e0e0; margin: 12px 0;">', text, flags=re.M)
 
         # Ссылки [текст](url)
         text = re.sub(r'\[(.*?)\]\((.*?)\)', r'<a href="\2" style="color: #2563eb; text-decoration: none;">\1</a>', text)
+
+        # === Таблицы ===
+
+        lines = text.split('\n')
+        new_lines = []
+        i = 0
+        while i < len(lines):
+            # Проверяем, начинается ли блок с таблицы
+            if '|' in lines[i] and i + 1 < len(lines) and '|' in lines[i + 1]:
+                # Собираем все строки таблицы
+                table_lines = []
+                while i < len(lines) and '|' in lines[i]:
+                    table_lines.append(lines[i])
+                    i += 1
+                table_html = self._parse_table(table_lines)
+                if table_html:
+                    new_lines.append(table_html)
+                else:
+                    # Если парсинг не удался — добавляем как обычный текст
+                    new_lines.extend(table_lines)
+            else:
+                new_lines.append(lines[i])
+                i += 1
+
+        text = '\n'.join(new_lines)
 
         # Переносы строк
         text = text.replace('\n', '<br>')
@@ -192,6 +240,53 @@ class MessageCard(QFrame):
         ">{text}</div>
         </body></html>
         """
+
+    # --------------------------------------------------
+
+    def _parse_table(self, lines):
+        """Парсит Markdown-таблицу и возвращает HTML"""
+        if len(lines) < 3:
+            return None
+    
+        # Проверяем, что вторая строка — разделитель (|---|)
+        if not re.match(r'^[\s\|:\-]+$', lines[1]):
+            return None
+    
+        # Заголовки
+        headers = [cell.strip() for cell in lines[0].split('|')[1:-1]]
+        if not headers:
+            return None
+    
+        # Данные
+        rows = []
+        for line in lines[2:]:
+            cells = [cell.strip() for cell in line.split('|')[1:-1]]
+            if cells:
+                rows.append(cells)
+    
+        if not rows:
+            return None
+    
+        # Строим HTML
+        html = '<table style="border-collapse: collapse; margin: 8px 0; width: 100%; font-size: 13px;">'
+    
+        # Заголовок
+        html += '<thead><tr>'
+        for h in headers:
+            html += f'<th style="border: 1px solid #d0d0d0; padding: 6px 10px; background: #f0f0f0; font-weight: 600; text-align: left;">{h}</th>'
+        html += '</tr></thead>'
+    
+        # Тело
+        html += '<tbody>'
+        for row in rows:
+            html += '<tr>'
+            for cell in row:
+                html += f'<td style="border: 1px solid #d0d0d0; padding: 6px 10px;">{cell}</td>'
+            html += '</tr>'
+        html += '</tbody>'
+    
+        html += '</table>'
+        return html
 
     # --------------------------------------------------
 

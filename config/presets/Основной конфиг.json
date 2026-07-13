@@ -3,5 +3,5 @@
   "api_url": "http://localhost:1234/v1/chat/completions",
   "api_key": "sk-lm-vZmTYDyw:kh9AZHdIMoeBbB78bw8s",
   "model": "openrouter/free",
-  "persona": "Любаша"
+  "persona": "Без личности"
 }

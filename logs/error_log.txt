@@ -259,3 +259,367 @@ Traceback (most recent call last):
 IndexError: list index out of range
 2026-07-13 05:05:16 [ERROR] HTTP 429 от API: Provider returned error
 2026-07-13 05:07:30 [ERROR] HTTP 404 от API: No endpoints found that support image input
+2026-07-14 00:32:36 [ERROR] Ошибка генерации заголовка чата: ReadTimeout: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+Traceback (most recent call last):
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connection.py", line 571, in getresponse
+    httplib_response = super().getresponse()
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 1459, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 297, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\adapters.py", line 696, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\util\retry.py", line 498, in increment
+    raise reraise(type(error), error, _stacktrace)
+          ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\util\util.py", line 39, in reraise
+    raise value
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 536, in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 367, in _raise_timeout
+    raise ReadTimeoutError(
+        self, url, f"Read timed out. (read timeout={timeout_value})"
+    ) from err
+urllib3.exceptions.ReadTimeoutError: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 273, in run
+    response = requests.post(
+        self.config['api_url'],
+    ...<12 lines>...
+        timeout=30,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\api.py", line 134, in post
+    return request("post", url, data=data, json=json, **kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\api.py", line 71, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\sessions.py", line 651, in request
+    resp = self.send(prep, **send_kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\sessions.py", line 784, in send
+    r = adapter.send(request, **kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\adapters.py", line 742, in send
+    raise ReadTimeout(e, request=request)
+requests.exceptions.ReadTimeout: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+2026-07-14 00:32:36 [ERROR] Генерация заголовка чата не удалась: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+2026-07-14 00:37:01 [ERROR] Ошибка генерации заголовка чата: ReadTimeout: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+Traceback (most recent call last):
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connection.py", line 571, in getresponse
+    httplib_response = super().getresponse()
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 1459, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 297, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\adapters.py", line 696, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\util\retry.py", line 498, in increment
+    raise reraise(type(error), error, _stacktrace)
+          ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\util\util.py", line 39, in reraise
+    raise value
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 536, in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 367, in _raise_timeout
+    raise ReadTimeoutError(
+        self, url, f"Read timed out. (read timeout={timeout_value})"
+    ) from err
+urllib3.exceptions.ReadTimeoutError: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 273, in run
+    response = requests.post(
+        self.config['api_url'],
+    ...<12 lines>...
+        timeout=30,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\api.py", line 134, in post
+    return request("post", url, data=data, json=json, **kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\api.py", line 71, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\sessions.py", line 651, in request
+    resp = self.send(prep, **send_kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\sessions.py", line 784, in send
+    r = adapter.send(request, **kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\adapters.py", line 742, in send
+    raise ReadTimeout(e, request=request)
+requests.exceptions.ReadTimeout: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+2026-07-14 00:37:01 [ERROR] Генерация заголовка чата не удалась: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+2026-07-14 00:41:28 [ERROR] Ошибка генерации заголовка чата: ReadTimeout: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+Traceback (most recent call last):
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connection.py", line 571, in getresponse
+    httplib_response = super().getresponse()
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 1459, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 297, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\adapters.py", line 696, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\util\retry.py", line 498, in increment
+    raise reraise(type(error), error, _stacktrace)
+          ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\util\util.py", line 39, in reraise
+    raise value
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 536, in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 367, in _raise_timeout
+    raise ReadTimeoutError(
+        self, url, f"Read timed out. (read timeout={timeout_value})"
+    ) from err
+urllib3.exceptions.ReadTimeoutError: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 273, in run
+    response = requests.post(
+        self.config['api_url'],
+    ...<12 lines>...
+        timeout=30,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\api.py", line 134, in post
+    return request("post", url, data=data, json=json, **kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\api.py", line 71, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\sessions.py", line 651, in request
+    resp = self.send(prep, **send_kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\sessions.py", line 784, in send
+    r = adapter.send(request, **kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\adapters.py", line 742, in send
+    raise ReadTimeout(e, request=request)
+requests.exceptions.ReadTimeout: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+2026-07-14 00:41:28 [ERROR] Генерация заголовка чата не удалась: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+2026-07-14 00:50:21 [ERROR] Ошибка генерации заголовка чата: ReadTimeout: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+Traceback (most recent call last):
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connection.py", line 571, in getresponse
+    httplib_response = super().getresponse()
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 1459, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\http\client.py", line 297, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\Андрюша\AppData\Local\Python\pythoncore-3.14-64\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\adapters.py", line 696, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\util\retry.py", line 498, in increment
+    raise reraise(type(error), error, _stacktrace)
+          ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\util\util.py", line 39, in reraise
+    raise value
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 536, in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\urllib3\connectionpool.py", line 367, in _raise_timeout
+    raise ReadTimeoutError(
+        self, url, f"Read timed out. (read timeout={timeout_value})"
+    ) from err
+urllib3.exceptions.ReadTimeoutError: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 273, in run
+    response = requests.post(
+        self.config['api_url'],
+    ...<12 lines>...
+        timeout=30,
+    )
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\api.py", line 134, in post
+    return request("post", url, data=data, json=json, **kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\api.py", line 71, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\sessions.py", line 651, in request
+    resp = self.send(prep, **send_kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\sessions.py", line 784, in send
+    r = adapter.send(request, **kwargs)
+  File "D:\Project_LM-client\.venv\Lib\site-packages\requests\adapters.py", line 742, in send
+    raise ReadTimeout(e, request=request)
+requests.exceptions.ReadTimeout: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+2026-07-14 00:50:21 [ERROR] Генерация заголовка чата не удалась: HTTPConnectionPool(host='localhost', port=1234): Read timed out. (read timeout=30)
+2026-07-14 01:01:17 [ERROR] Генерация заголовка чата не удалась: Пустой ответ
+2026-07-14 01:04:04 [ERROR] Генерация заголовка чата не удалась: Неизвестный формат ответа: {"id": "chatcmpl-ikfouqolz3sdp4hocnmcqh", "object": "chat.completion", "created": 1783976643, "model": "qwen/qwen3.5-9b", "choices": [{"index": 0, "message": {"role": "assistant", "content": "", "reas
+2026-07-14 01:29:34 [ERROR] Генерация заголовка чата не удалась: Таймаут при генерации заголовка
+2026-07-14 01:57:02 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 593, in <module>
+    assistant = App()
+  File "D:\Project_LM-client\Assistant.py", line 381, in __init__
+    self.window = ChatUI(self.config)
+                  ~~~~~~^^^^^^^^^^^^^
+  File "D:\Project_LM-client\ui.py", line 210, in __init__
+    self.set_input_enabled(False)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "D:\Project_LM-client\ui.py", line 760, in set_input_enabled
+    self.setStatus("Готов")
+    ~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\Project_LM-client\ui.py", line 474, in setStatus
+    self.status_label.setText(text)
+    ^^^^^^^^^^^^^^^^^
+AttributeError: 'ChatUI' object has no attribute 'status_label'
+
+2026-07-14 01:59:15 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\assistant.py", line 593, in <module>
+    assistant = App()
+  File "D:\Project_LM-client\assistant.py", line 381, in __init__
+    self.window = ChatUI(self.config)
+                  ~~~~~~^^^^^^^^^^^^^
+  File "D:\Project_LM-client\ui.py", line 210, in __init__
+    self.set_input_enabled(False)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "D:\Project_LM-client\ui.py", line 760, in set_input_enabled
+    self.setStatus("Готов")
+    ~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\Project_LM-client\ui.py", line 474, in setStatus
+    self.status_label.setText(text)
+    ^^^^^^^^^^^^^^^^^
+AttributeError: 'ChatUI' object has no attribute 'status_label'
+
+2026-07-14 02:35:11 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\widgets\left_bar.py", line 195, in <lambda>
+    lambda pos, fname=file: self._show_context_menu(btn, pos, fname)
+                            ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+TypeError: LeftBar._show_context_menu() takes 3 positional arguments but 4 were given
+
+2026-07-14 02:46:55 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 698, in <module>
+    assistant = App()
+  File "D:\Project_LM-client\Assistant.py", line 383, in __init__
+    self.window.left_bar.chat_deleted.connect(self.on_chat_deleted)
+    ^^^^^^^^^^^
+AttributeError: 'App' object has no attribute 'window'
+
+2026-07-14 02:47:01 [ERROR] Критическая ошибка:
+Traceback (most recent call last):
+  File "D:\Project_LM-client\assistant.py", line 698, in <module>
+    assistant = App()
+  File "D:\Project_LM-client\assistant.py", line 383, in __init__
+    self.window.left_bar.chat_deleted.connect(self.on_chat_deleted)
+    ^^^^^^^^^^^
+AttributeError: 'App' object has no attribute 'window'
+

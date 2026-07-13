@@ -1,5 +1,6 @@
 # assistant.py
 import sys
+import re
 import logging
 import traceback
 import requests
@@ -11,6 +12,7 @@ from PySide6.QtCore import QTimer, QThread, Signal, QObject, QMutex, QWaitCondit
 from pathlib import Path
 from cache_manager import CacheManager
 from config import load_config, save_config
+from datetime import datetime
 
 #MODEL_NAME = "deepseek-v4-flash"
 CacheManager.init()
@@ -39,6 +41,11 @@ def excepthook(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = excepthook
 
+# Заголовок вида "Чат HH:MM" — так называет новый чат LeftBar.create_new_chat.
+# Пока название чата не менялось (совпадает с этим шаблоном), после первого
+# сообщения пользователя генерируем осмысленный заголовок через модель.
+DEFAULT_CHAT_TITLE_RE = re.compile(r'^Чат \d{2}:\d{2}$')
+
 
 def image_to_data_url(path):
     suffix = Path(path).suffix.lower().lstrip(".")
@@ -66,6 +73,7 @@ class LMWorker(QObject):
         self._response = None
         self._mutex = QMutex()
         self._cond = QWaitCondition()
+
 
     def cancel(self):
         """Безопасная отмена запроса"""
@@ -241,6 +249,125 @@ class LMWorker(QObject):
 
         self.error.emit(msg)
 
+    def on_chat_deleted(self, filename):
+        """Обработка удаления чата"""
+        if filename == self.current_chat_file:
+            self.current_chat_file = None
+            self._clear_chat()
+            self.window.set_input_enabled(False)
+            self.window.setStatus("Чат удалён. Выберите другой или создайте новый.")
+
+class TitleWorker(QObject):
+    """
+    Отдельный лёгкий запрос (без стрима) для генерации короткого заголовка чата
+    на основе первого сообщения пользователя.
+    """
+    title_received = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, user_text, config):
+        super().__init__()
+        self.user_text = user_text
+        self.config = config
+
+    def run(self):
+        try:
+            model_name = self.config.get("model", "openrouter/free")
+            
+            headers = {
+                "Authorization": f"Bearer {self.config['api_key']}",
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (compatible; LocalChatAssistant/1.0)",
+                "HTTP-Referer": "https://localhost",
+                "X-Title": "Local Chat Assistant",
+            }
+            
+            # ✅ Жёстко требуем короткий ответ БЕЗ размышлений
+            prompt = (
+                f"/no_think ОТВЕТЬ ТОЛЬКО ОДНИМ ПРЕДЛОЖЕНИЕМ ДО 5 СЛОВ. НЕ РАЗМЫШЛЯЙ. НЕ ПИШИ 'Думаю'.\n\n"
+                f"Тема сообщения пользователя:\n{self.user_text}\n\n"
+                f"Тема:"
+            )
+            
+            # ✅ Добавляем system, который запрещает reasoning
+            messages = [
+                {"role": "system", "content": "Ты — помощник, который даёт только короткие фактические ответы без объяснений. Не используй мыслительный процесс."},
+                {"role": "user", "content": prompt}
+            ]
+
+            response = requests.post(
+                self.config['api_url'],
+                headers=headers,
+                json={
+                    "model": model_name,
+                    "messages": messages,
+                    "chat_template_kwargs": {"enable_thinking": False},
+                    "stream": False,
+                    # "max_tokens": 150,  # ✅ даём достаточно токенов, чтобы модель успела закончить мысль
+                    "temperature": 0.1,
+                },
+                timeout=150,
+            )
+
+            if response.status_code != 200:
+                self.error.emit(f"HTTP {response.status_code}: {response.text[:200]}")
+                return
+
+            data = response.json()
+            
+            # ✅ Пытаемся достать content
+            content = ""
+            if "choices" in data and data["choices"]:
+                msg = data["choices"][0].get("message", {})
+                content = msg.get("content", "") or msg.get("reasoning_content", "")
+            
+            # ✅ Если это reasoning — вырезаем всё до первого ответа
+            if content:
+                # Если в ответе есть "Thinking process" — пытаемся найти фразу после неё
+                if "Thinking process" in content or "**" in content:
+                    # Ищем строку, которая начинается с "- Тема:" или просто не содержит спецсимволов
+                    lines = content.split("\n")
+                    for line in lines:
+                        line = line.strip()
+                        # Ищем осмысленную строку
+                        if line and not line.startswith("**") and not line.startswith("*") and not line.startswith("1."):
+                            content = line
+                            break
+                    
+                    # Если ничего не нашли — берём последнюю строку
+                    if not content or "Thinking process" in content:
+                        for line in reversed(lines):
+                            line = line.strip()
+                            if line and len(line) > 3:
+                                content = line
+                                break
+
+            # ✅ Убираем мусор
+            if content:
+                # Убираем "Тема:" в начале
+                content = re.sub(r'^Тема:\s*', '', content)
+                # Убираем кавычки
+                content = content.strip().strip('"\'«»')
+                # Если слишком длинное — обрезаем
+                if len(content) > 60:
+                    content = content[:60] + "..."
+                
+                if content and len(content) > 2:
+                    self.title_received.emit(content)
+                    return
+
+            # ✅ Если всё сломалось — последняя попытка: берём первые 5 слов из пользовательского сообщения
+            fallback = " ".join(self.user_text.split()[:5])
+            if fallback:
+                self.title_received.emit(fallback + "...")
+            else:
+                self.error.emit("Не удалось сгенерировать заголовок")
+
+        except requests.exceptions.Timeout:
+            self.error.emit("Таймаут при генерации заголовка")
+        except Exception as e:
+            logging.error(f"Ошибка генерации заголовка: {type(e).__name__}: {str(e)}", exc_info=True)
+            self.error.emit(str(e))
 
 class App(QObject):
 
@@ -254,11 +381,96 @@ class App(QObject):
         self._full_response = ""
         self._current_response = ""
 
+
+        # Файл текущего открытого чата (устанавливается при выборе/создании чата в сайдбаре)
+        self.current_chat_file = None
+        # Активные фоновые запросы генерации заголовка — храним ссылки,
+        # чтобы поток/воркер не были собраны сборщиком мусора до завершения
+        self._title_jobs = []
+
         self.window = ChatUI(self.config)
         self.window.send_message.connect(self.on_send)
         self.window.settings_saved.connect(self.on_settings_saved)
         self.window.stop_requested.connect(self.on_stop)
+        self.window.chat_selected.connect(self.on_chat_selected)
         self.window.show()
+        self.window.left_bar.chat_deleted.connect(self.on_chat_deleted)
+
+    def on_chat_selected(self, filename):
+        """
+        Пользователь выбрал (или создал) чат в сайдбаре.
+        NB: здесь только запоминается, какой файл сейчас активен — этого
+        достаточно для переименования заголовка. Подгрузка самой истории
+        сообщений из файла в окно чата — отдельная задача, сюда не входит.
+        """
+        self.current_chat_file = filename
+        self.window.set_input_enabled(bool(filename))
+        if filename:
+            self._load_chat(filename)  # ← загружаем чат
+        else:
+            self._clear_chat()         # ← очищаем, если чат не выбран
+
+    def _get_chat_title(self, filename):
+        """Читает текущий title чата напрямую из его JSON-файла в history/"""
+        if not filename:
+            return None
+        full_path = Path(self.window.left_bar.history_dir) / filename
+        try:
+            with open(full_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("title")
+        except Exception as e:
+            logging.error(f"Не удалось прочитать title чата {filename}: {e}")
+            return None
+
+    def _maybe_generate_title(self, text, filename):
+        """Если у чата ещё дефолтный заголовок ('Чат HH:MM'), запускает генерацию нового"""
+        if not text.strip() or not filename:
+            return
+
+        current_title = self._get_chat_title(filename)
+        if not current_title or not DEFAULT_CHAT_TITLE_RE.match(current_title):
+            return
+
+        self._start_title_generation(text, filename)
+
+    def _start_title_generation(self, text, filename):
+        thread = QThread()
+        worker = TitleWorker(text, self.config)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+
+        worker.title_received.connect(lambda title, fn=filename: self._on_title_generated(fn, title))
+        worker.error.connect(self._on_title_error)
+
+        # Каноничная Qt-цепочка остановки/очистки потока-воркера.
+        # ВАЖНО: раньше здесь был отдельный _cleanup(), который сам вызывал
+        # thread.quit() + thread.wait() — но _cleanup был обычной функцией
+        # (не слотом QObject), поэтому Qt подключал её напрямую (direct
+        # connection) и выполнял в том же фоновом потоке, где работал воркер.
+        # thread.wait(), вызванный потоком САМ НА СЕБЯ, и давал
+        # "QThread::wait: Thread tried to wait on itself" — Qt просто
+        # игнорировал ожидание, поток мог не выгружаться корректно.
+        # Правильно — доверить остановку сигналам, без ручного wait():
+        worker.title_received.connect(thread.quit)
+        worker.error.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+
+        job = (thread, worker)
+        self._title_jobs.append(job)
+        thread.finished.connect(lambda: self._title_jobs.remove(job) if job in self._title_jobs else None)
+
+        thread.start()
+
+    def _on_title_generated(self, filename, title):
+        print(f"✅ Заголовок чата обновлён: {title}")
+        self.window.left_bar.rename_chat(filename, title)
+
+    def _on_title_error(self, message):
+        # Раньше это шло только в logs/error_log.txt и было не видно в консоли
+        print(f"⚠️ Не удалось сгенерировать заголовок чата: {message}")
+        logging.error(f"Генерация заголовка чата не удалась: {message}")
 
     def _stop_thread(self):
         """Останавливаем текущий поток и очищаем ресурсы"""
@@ -335,6 +547,11 @@ class App(QObject):
                     logging.error(f"Не удалось прочитать файл {path}: {e}")
 
         self.history.append({"role": "user", "content": content})
+        self._save_chat()
+        # Если у текущего чата ещё дефолтное название ("Чат HH:MM") — запускаем
+        # фоновую генерацию короткого заголовка по первому сообщению пользователя.
+        # Идёт параллельно с основной генерацией, чтобы не задерживать ответ.
+        # self._maybe_generate_title(text, self.current_chat_file)
 
         # Показываем пустое сообщение для ответа
         self.window.addMessage("assistant", "")
@@ -365,10 +582,15 @@ class App(QObject):
         # Сохраняем в историю
         if self._full_response:
             self.history.append({"role": "assistant", "content": self._full_response})
+            self._save_chat()
         
         self._is_typing = False
         self._current_response = ""
         self._full_response = ""
+        if self.current_chat_file:
+            current_title = self._get_chat_title(self.current_chat_file)
+            if current_title and DEFAULT_CHAT_TITLE_RE.match(current_title):
+                self._start_title_generation(self.history[-2]["content"], self.current_chat_file)
 
     def on_error(self, error_text):
         """Ошибка в стриме"""
@@ -382,6 +604,95 @@ class App(QObject):
     def on_settings_saved(self, new_config):
         self.config = new_config
 
+    def _save_chat(self):
+        """Сохраняет текущую историю в файл чата"""
+        if not self.current_chat_file:
+            return
+    
+        # Если история пустая — не сохраняем
+        if not self.history:
+            return
+    
+        full_path = Path(self.window.left_bar.history_dir) / self.current_chat_file
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+    
+        try:
+            # Читаем существующий файл, чтобы не потерять title и другие поля
+            if full_path.exists():
+                with open(full_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                data = {}
+        
+            # Обновляем историю и время последнего изменения
+            data["messages"] = self.history
+            data["updated"] = datetime.now().isoformat()
+        
+            # Если нет title — ставим дефолтный
+            if "title" not in data or not data["title"]:
+                data["title"] = f"Чат {datetime.now().strftime('%H:%M')}"
+        
+            with open(full_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            
+            print(f"💾 Чат сохранён: {self.current_chat_file}")
+        
+        except Exception as e:
+            logging.error(f"Не удалось сохранить чат {self.current_chat_file}: {e}")
+
+    def _load_chat(self, filename):
+        """Загружает чат из файла"""
+        if not filename:
+            self._clear_chat()
+            return
+    
+        full_path = Path(self.window.left_bar.history_dir) / filename
+        if not full_path.exists():
+            self._clear_chat()
+            return
+    
+        try:
+            with open(full_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            self._clear_chat()
+
+            # ✅ history → messages
+            self.history = data.get("messages", [])
+        
+            # Загружаем в UI
+            for msg in self.history:
+                role = msg.get("role", "assistant")
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    # Если content — список (вложения), пытаемся извлечь текст
+                    text = ""
+                    for part in content:
+                        if part.get("type") == "text":
+                            text = part.get("text", "")
+                            break
+                    content = text
+                self.window.addMessage(role, content)
+        
+            print(f"📂 Чат загружен: {filename}, сообщений: {len(self.history)}")
+        
+        except Exception as e:
+            logging.error(f"Не удалось загрузить чат {filename}: {e}")
+
+    def _clear_chat(self):
+        """Очищает окно чата и историю"""
+        self.window.clearMessages()
+        self.history = []
+
+    def on_chat_deleted(self, filename):
+        """Обработка удаления чата"""
+        print(f"🗑 Сигнал удаления получен: {filename}")
+    
+        if filename == self.current_chat_file:
+            self.current_chat_file = None
+            self._clear_chat()
+            self.window.set_input_enabled(False)
+            self.window.setStatus("Чат удалён. Выберите другой или создайте новый.")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
