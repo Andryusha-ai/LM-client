@@ -248,3 +248,14 @@ Traceback (most recent call last):
                         ^^^^
 UnboundLocalError: cannot access local variable 'name' where it is not associated with a value
 
+2026-07-13 04:56:05 [ERROR] HTTP 403 от API: {"success": false, "error": "Access denied by security policy."}
+2026-07-13 04:58:21 [ERROR] HTTP 403 от API: {"success": false, "error": "Access denied by security policy."}
+2026-07-13 04:58:53 [ERROR] HTTP 429 от API: Provider returned error
+2026-07-13 05:01:23 [ERROR] Неизвестная ошибка: IndexError: list index out of range
+Traceback (most recent call last):
+  File "D:\Project_LM-client\Assistant.py", line 165, in run
+    delta = data.get("choices", [{}])[0].get("delta", {})
+            ~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+IndexError: list index out of range
+2026-07-13 05:05:16 [ERROR] HTTP 429 от API: Provider returned error
+2026-07-13 05:07:30 [ERROR] HTTP 404 от API: No endpoints found that support image input

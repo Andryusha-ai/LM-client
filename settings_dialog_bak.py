@@ -211,12 +211,11 @@ class SettingsDialog(QDialog):
         self.presets_dir = Path("config/presets")
         self.presets_dir.mkdir(parents=True, exist_ok=True)
 
-        # Загружаем списки. Пресеты сразу выбираем на активном (current_preset),
-        # а не на первом по алфавиту — иначе поля заполнятся не тем пресетом.
+        # Загружаем списки
         self._load_personas()
-        self._load_presets(select=self.current_config.get("current_preset", ""))
+        self._load_presets()
 
-        # Загружаем текущие значения (имя пресета, fallback без пресета и т.п.)
+        # Загружаем текущие значения
         self._load_current_values()
 
         # Фокус на поле URL
@@ -601,21 +600,9 @@ class SettingsDialog(QDialog):
     # Методы управления пресетами
     # ---------------------------------------------------------
 
-    def _load_presets(self, select: str = ""):
-        """
-        Загрузка списка пресетов.
-
-        select — имя пресета, которое нужно выбрать после загрузки списка
-        (обычно текущий активный пресет из конфига). Раньше список после
-        очистки заполнялся через addItem(), из-за чего Qt автоматически
-        выбирал первый пункт по алфавиту и синхронно вызывал
-        _on_preset_changed для НЕ того пресета — а если реальный текущий
-        пресет затем оказывался на том же индексе, сигнал повторно не
-        срабатывал, и поля формы оставались от случайного пресета.
-        Поэтому здесь сигналы на время построения списка блокируются,
-        а нужный пресет применяется к полям один раз и явно.
-        """
-        self.preset_combo.blockSignals(True)
+    def _load_presets(self):
+        """Загрузка списка пресетов"""
+        current = self.preset_combo.currentText() if self.preset_combo.count() > 0 else ""
         self.preset_combo.clear()
 
         preset_files = list(self.presets_dir.glob("*.json"))
@@ -624,68 +611,42 @@ class SettingsDialog(QDialog):
 
         self.preset_combo.addItem("➕ Новый пресет")
 
-        target_index = 0
-        if select:
-            found = self.preset_combo.findText(select)
-            if found >= 0:
-                target_index = found
-        self.preset_combo.setCurrentIndex(target_index)
-        self.preset_combo.blockSignals(False)
-
-        # Применяем выбранный пункт к полям формы явно и один раз
-        self._on_preset_changed(self.preset_combo.currentText())
+        if current:
+            index = self.preset_combo.findText(current)
+            if index >= 0:
+                self.preset_combo.setCurrentIndex(index)
 
     def _refresh_presets(self):
-        """Обновить список пресетов, сохранив текущий выбор"""
-        self._load_presets(select=self.preset_combo.currentText())
+        """Обновить список пресетов"""
+        self._load_presets()
 
     def _on_preset_changed(self, text):
         """Обработка смены пресета"""
         is_new = text == "➕ Новый пресет"
-        is_preset = bool(text) and not is_new
+        is_preset = text and text != "➕ Новый пресет"
 
         self.preset_name_input.setEnabled(is_new)
 
         if is_preset:
-            self.preset_name_input.setText(text)
-            self._apply_preset_data(text)
+            preset_file = self.presets_dir / f"{text}.json"
+            if preset_file.exists():
+                try:
+                    with open(preset_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        self.api_url_input.setText(data.get("api_url", ""))
+                        self.api_key_input.setText(data.get("api_key", ""))
+                        self.model_input.setText(data.get("model", "openrouter/free"))
+                        persona = data.get("persona", "Без личности")
+                        index = self.persona_combo.findText(persona)
+                        if index >= 0:
+                            self.persona_combo.setCurrentIndex(index)
+                except Exception:
+                    pass
         elif is_new:
             self.preset_name_input.setText("")
             self.preset_name_input.setFocus()
         else:
             self.preset_name_input.setText("")
-
-    def _apply_preset_data(self, preset_name: str) -> bool:
-        """
-        Читает файл пресета и заполняет поля формы (URL, ключ, модель,
-        персона). Используется и при смене пресета в комбобоксе, и при
-        первоначальной загрузке диалога — чтобы модель, URL и ключ всегда
-        заполнялись из одного и того же места и не расходились.
-        Возвращает True, если пресет успешно прочитан.
-        """
-        preset_file = self.presets_dir / f"{preset_name}.json"
-        if not preset_file.exists():
-            return False
-
-        try:
-            with open(preset_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            return False
-
-        self.api_url_input.setText(data.get("api_url", ""))
-        self.api_key_input.setText(data.get("api_key", ""))
-        self.model_input.setText(data.get("model", "openrouter/free"))
-
-        persona = data.get("persona", "Без личности")
-        index = self.persona_combo.findText(persona)
-        if index >= 0:
-            self.persona_combo.setCurrentIndex(index)
-            self._load_persona_preview(persona)
-        else:
-            self.persona_combo.setCurrentIndex(0)
-
-        return True
 
     def _save_current_as_preset(self):
         """Сохранение текущих настроек как пресет"""
@@ -700,17 +661,7 @@ class SettingsDialog(QDialog):
             persona_name = self.persona_name_input.text().strip()
             if persona_name:
                 current_data["persona"] = persona_name
-        # ВАЖНО: для существующего пресета именем-целью для сохранения
-        # должно быть то, что реально выбрано в preset_combo, а не
-        # значение preset_name_input — это поле задизейблено и
-        # предназначено только для ввода имени НОВОГО пресета
-        # (при переключении между существующими пресетами оно раньше
-        # могло остаться от предыдущего выбора).
-        if current_preset and current_preset != "➕ Новый пресет":
-            name = current_preset
-        else:
-            name = self.preset_name_input.text().strip()
-
+        name = self.preset_name_input.text().strip()
         if current_preset and current_preset != "➕ Новый пресет":
             preset_file = self.presets_dir / f"{current_preset}.json"
             if preset_file.exists():
@@ -760,7 +711,10 @@ class SettingsDialog(QDialog):
 
             self.current_config["current_preset"] = name
 
-            self._load_presets(select=name)
+            self._load_presets()
+            index = self.preset_combo.findText(name)
+            if index >= 0:
+                self.preset_combo.setCurrentIndex(index)
 
             QMessageBox.information(
                 self,
@@ -968,24 +922,30 @@ class SettingsDialog(QDialog):
                 QMessageBox.critical(self, "Ошибка", f"Не удалось удалить: {e}")
 
     def _load_current_values(self):
-        """
-        Загрузка текущих значений при открытии диалога.
+        """Загрузка текущих значений из конфига"""
+        current_preset = self.current_config.get("current_preset", "")
+        if current_preset:
+            preset_file = self.presets_dir / f"{current_preset}.json"
+            self.preset_name_input.setText(current_preset)
+            self.preset_name_input.setEnabled(False)
+            if preset_file.exists():
+                try:
+                    with open(preset_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        self.api_url_input.setText(data.get("api_url", ""))
+                        self.api_key_input.setText(data.get("api_key", ""))
+                        persona = data.get("persona", "Без личности")
+                        index = self.persona_combo.findText(persona)
+                        if index >= 0:
+                            self.persona_combo.setCurrentIndex(index)
+                            self._load_persona_preview(persona)
+                        preset_index = self.preset_combo.findText(current_preset)
+                        if preset_index >= 0:
+                            self.preset_combo.setCurrentIndex(preset_index)
+                    return
+                except Exception:
+                    pass
 
-        Поля URL/ключа/модели/персоны, а также имя пресета в
-        preset_name_input, к этому моменту уже выставлены из
-        _load_presets(select=current_preset) в __init__ — она сама
-        выбирает нужный (или, если не нашла — первый доступный) пресет
-        и применяет его данные через _on_preset_changed()/_apply_preset_data().
-
-        Здесь остаётся только фолбэк на случай, если пресетов нет вообще.
-        """
-        current_text = self.preset_combo.currentText()
-        is_real_preset = bool(current_text) and current_text != "➕ Новый пресет"
-
-        if is_real_preset:
-            return
-
-        # Пресет не выбран/не найден — используем значения из общего конфига
         self.api_url_input.setText(self.current_config.get("api_url", ""))
         self.api_key_input.setText(self.current_config.get("api_key", ""))
         self.model_input.setText(self.current_config.get("model", "openrouter/free"))

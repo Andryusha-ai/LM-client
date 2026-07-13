@@ -104,21 +104,10 @@ class LMWorker(QObject):
                     except Exception:
                         pass   
        
-            # Отправляем запрос в стрим-режиме.
-            # User-Agent по умолчанию у requests ("python-requests/x.x.x")
-            # часто прилетает под антибот-правила WAF перед API (это и даёт
-            # "Access denied by security policy" ещё до самого OpenRouter).
-            # HTTP-Referer/X-Title — заголовки, которые OpenRouter сам
-            # рекомендует слать для идентификации приложения.
+            # Отправляем запрос в стрим-режиме
             self._response = self._session.post(
                 self.config['api_url'],
-                headers={
-                    "Authorization": f"Bearer {self.config['api_key']}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0 (compatible; LocalChatAssistant/1.0)",
-                    "HTTP-Referer": "https://localhost",
-                    "X-Title": "Local Chat Assistant",
-                },
+                headers={"Authorization": f"Bearer {self.config['api_key']}"},
                 json={
                     "model": model_name,  
                     "messages": messages,
@@ -130,7 +119,7 @@ class LMWorker(QObject):
             
             # Проверяем статус до чтения стрима
             if self._response.status_code != 200:
-                self._handle_http_error(self._response.status_code, self._response)
+                self._handle_http_error(self._response.status_code)
                 return
             
             # Читаем стрим
@@ -188,7 +177,7 @@ class LMWorker(QObject):
         except requests.exceptions.HTTPError as e:
             if not self._cancelled:
                 status = e.response.status_code if e.response is not None else "?"
-                self._handle_http_error(status, e.response)
+                self._handle_http_error(status)
         except Exception as e:
             logging.error(f"Неизвестная ошибка: {type(e).__name__}: {str(e)}", exc_info=True)
             if not self._cancelled:
@@ -203,43 +192,14 @@ class LMWorker(QObject):
             except Exception:
                 pass
 
-    def _handle_http_error(self, status, response=None):
+    def _handle_http_error(self, status):
         """Обработка HTTP ошибок"""
-        detail = ""
-        if response is not None:
-            try:
-                body = response.json()
-                # OpenRouter (и большинство OpenAI-совместимых API) кладут
-                # текст причины в error.message
-                detail = ""
-                if isinstance(body, dict):
-                    err = body.get("error")
-                    if isinstance(err, dict):
-                        detail = err.get("message", "")
-                if not detail:
-                    detail = json.dumps(body, ensure_ascii=False)[:500]
-            except Exception:
-                try:
-                    detail = response.text[:500]
-                except Exception:
-                    detail = ""
-
-            if detail:
-                logging.error(f"HTTP {status} от API: {detail}")
-
         if status == 401:
-            msg = "Неверный API ключ (401)"
+            self.error.emit("Неверный API ключ (401)")
         elif status == 404:
-            msg = "API URL не найден (404) — проверь адрес"
-        elif status == 403:
-            msg = "Доступ запрещён (403)"
+            self.error.emit("API URL не найден (404) — проверь адрес")
         else:
-            msg = f"Ошибка сервера ({status})"
-
-        if detail:
-            msg += f": {detail}"
-
-        self.error.emit(msg)
+            self.error.emit(f"Ошибка сервера ({status})")
 
 
 class App(QObject):
