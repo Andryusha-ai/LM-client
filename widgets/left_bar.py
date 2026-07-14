@@ -2,7 +2,7 @@ import os
 import json
 import uuid
 from datetime import datetime, timedelta
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel,
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
                                QScrollArea, QLineEdit)
 from PySide6.QtCore import Qt, Signal
 
@@ -30,9 +30,10 @@ class LeftBar(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        self.layout = QVBoxLayout(self)
+        self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(10, 20, 10, 20)
         self.layout.setSpacing(5)
+        self.is_collapsed = False
         
         # Стиль для левой панели (светлая тема)
         self.setStyleSheet("""
@@ -42,6 +43,32 @@ class LeftBar(QWidget):
                 font-family: 'Segoe UI', sans-serif;
             }
         """)
+
+        self.toggle_btn = QPushButton("◀")
+        self.toggle_btn.setFixedSize(24, 24)
+        self.toggle_btn.setFlat(True)
+        self.toggle_btn.setToolTip("Свернуть панель")
+        self.toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                color: #6b7280;
+                font-size: 16px;
+            }
+            QPushButton:hover {
+                color: #111827;
+                background-color: rgba(0, 0, 0, 0.06);
+                border-radius: 6px;
+            }
+        """)
+        self.toggle_btn.clicked.connect(self.toggle_sidebar)
+
+        self.content_container = QWidget(self)
+        self.content_layout = QVBoxLayout(self.content_container)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        self.content_layout.setSpacing(5)
+        self.layout.addWidget(self.content_container, stretch=1)
+        self.layout.addWidget(self.toggle_btn, 0, Qt.AlignTop)
 
         # --- 1. Кнопка "Новый чат" ---
         self.new_chat_btn = QPushButton("+ Новый чат")
@@ -63,7 +90,7 @@ class LeftBar(QWidget):
             }
         """)
         self.new_chat_btn.clicked.connect(self.create_new_chat)
-        self.layout.addWidget(self.new_chat_btn)
+        self.content_layout.addWidget(self.new_chat_btn)
 
         # --- 2. Поиск по чатам ---
         self.search_bar = QLineEdit()
@@ -79,7 +106,7 @@ class LeftBar(QWidget):
             }
         """)
         self.search_bar.textChanged.connect(self.refresh_chat_list)
-        self.layout.addWidget(self.search_bar)
+        self.content_layout.addWidget(self.search_bar)
 
         # --- 3. Скролл-зона для списка чатов ---
         self.scroll_area = QScrollArea()
@@ -97,13 +124,20 @@ class LeftBar(QWidget):
         self.chat_list_layout.setContentsMargins(0, 10, 0, 10)
         
         self.scroll_area.setWidget(self.chat_list_container)
-        self.layout.addWidget(self.scroll_area)
+        self.content_layout.addWidget(self.scroll_area)
 
         # Принудительно обновляем размер виджета
         self.chat_list_container.setFixedWidth(280)
 
         # Обновляем список при запуске
         self.refresh_chat_list()
+
+    def toggle_sidebar(self):
+        self.is_collapsed = not self.is_collapsed
+        self.content_container.setVisible(not self.is_collapsed)
+        self.setFixedWidth(48 if self.is_collapsed else 300)
+        self.toggle_btn.setText("▶" if self.is_collapsed else "◀")
+        self.toggle_btn.setToolTip("Развернуть панель" if self.is_collapsed else "Свернуть панель")
 
     def create_new_chat(self):
         """Создает новый чат"""
