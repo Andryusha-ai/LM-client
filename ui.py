@@ -1,7 +1,7 @@
 # ui.py
 import os
-from PySide6.QtCore import Qt, Signal, QTimer, QEvent
-from PySide6.QtGui import QPainter, QColor, QPen, QIcon, QKeySequence, QShortcut
+from PySide6.QtCore import Qt, Signal, QTimer, QEvent, QPoint, QRect
+from PySide6.QtGui import QPainter, QColor, QPen, QIcon, QKeySequence, QShortcut, QPolygon
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -128,6 +128,48 @@ class SettingsButton(QPushButton):
         y = (self.height() - pixmap.height()) // 2
 
         painter.drawPixmap(x, y, pixmap)
+
+class SpeakerButton(QPushButton):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._muted = False
+        self.setFixedSize(36, 36)
+        self.setFlat(True)
+        self.setCursor(Qt.PointingHandCursor)
+        self._update_tooltip()
+
+    def _update_tooltip(self):
+        self.setToolTip("Включить звук" if self._muted else "Отключить звук")
+
+    def toggle(self):
+        self._muted = not self._muted
+        self._update_tooltip()
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        pen = QPen(QColor("#666666"), 2)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+
+        painter.drawRect(QRect(8, 12, 8, 12))
+
+        points = QPolygon([
+            QPoint(16, 12),
+            QPoint(24, 8),
+            QPoint(24, 28),
+            QPoint(16, 24),
+        ])
+        painter.drawPolygon(points)
+
+        if self._muted:
+            mute_pen = QPen(QColor("#c0392b"), 3)
+            painter.setPen(mute_pen)
+            painter.drawLine(10, 10, 26, 26)
         """
         Не используется:
         font = painter.font()
@@ -269,7 +311,10 @@ class ChatUI(QMainWindow):
         self.settings_button.clicked.connect(self._on_settings_clicked)
         row.addWidget(self.settings_button)
 
-        self.smart_button = SmartButton()
+        self.speaker_button = SpeakerButton()
+        self.speaker_button.setObjectName("speakerBtn")
+        self.speaker_button.clicked.connect(self.speaker_button.toggle)
+        row.addWidget(self.speaker_button)
 
         self.smart_button = SmartButton()
         self.smart_button.setObjectName("smartBtn")
@@ -352,6 +397,13 @@ class ChatUI(QMainWindow):
                 border-radius: 6px;
             }
             QPushButton#settingsBtn:hover { background-color: #e0e0e0; }
+
+            QPushButton#speakerBtn {
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+            }
+            QPushButton#speakerBtn:hover { background-color: #e0e0e0; }
 
             QPushButton#smartBtn {
                 background-color: #e0e0e0;
